@@ -16,11 +16,14 @@ def test_dr01_five_failures_within_120s_triggers_high_alert():
     res1 = engine.process_batch(batch_4)
     assert len(res1.alerts) == 0
 
-    # 5th failure at t=80s (within 120s window from 1st fail at t=20s) -> triggers DR01
+    # 5th failure at t=100s: after the previous batch's last event (t=80s)
+    # and within the 120s window measured from the first failure (t=20s).
     batch_5th = [
-        Log("evt-05", "srv-01", base_time + timedelta(seconds=80), "AUTH_FAILURE", "user1")
+        Log("evt-05", "srv-01", base_time + timedelta(seconds=100), "AUTH_FAILURE", "user1")
     ]
     res2 = engine.process_batch(batch_5th)
+    assert len(res2.accepted_logs) == 1
+    assert len(res2.rejected_logs) == 0
     assert len(res2.alerts) == 1
     alert = res2.alerts[0]
     assert alert.rule_id == "DR01"
@@ -99,14 +102,17 @@ def test_dr02_success_after_three_failures_in_300s():
     res1 = engine.process_batch(batch1)
     assert len(res1.alerts) == 0
 
-    # 3 failures followed by success -> triggers DR02
+    # Gap >120s since the preceding failure resets DR01's failure sequence.
+    # These 3 failures and the success are still within DR02's 300s window.
     batch2 = [
-        Log("evt-04", "srv-01", base_time + timedelta(seconds=30), "AUTH_FAILURE", "user1"),
-        Log("evt-05", "srv-01", base_time + timedelta(seconds=40), "AUTH_FAILURE", "user1"),
-        Log("evt-06", "srv-01", base_time + timedelta(seconds=50), "AUTH_FAILURE", "user1"),
-        Log("evt-07", "srv-01", base_time + timedelta(seconds=60), "AUTH_SUCCESS", "user1"),
+        Log("evt-04", "srv-01", base_time + timedelta(seconds=200), "AUTH_FAILURE", "user1"),
+        Log("evt-05", "srv-01", base_time + timedelta(seconds=210), "AUTH_FAILURE", "user1"),
+        Log("evt-06", "srv-01", base_time + timedelta(seconds=220), "AUTH_FAILURE", "user1"),
+        Log("evt-07", "srv-01", base_time + timedelta(seconds=230), "AUTH_SUCCESS", "user1"),
     ]
     res2 = engine.process_batch(batch2)
+    assert len(res2.accepted_logs) == 4
+    assert len(res2.rejected_logs) == 0
     assert len(res2.alerts) == 1
     alert = res2.alerts[0]
     assert alert.rule_id == "DR02"
@@ -115,7 +121,7 @@ def test_dr02_success_after_three_failures_in_300s():
 
     # Subsequent success without new failures -> no alert (failures were consumed)
     batch3 = [
-        Log("evt-08", "srv-01", base_time + timedelta(seconds=70), "AUTH_SUCCESS", "user1")
+        Log("evt-08", "srv-01", base_time + timedelta(seconds=240), "AUTH_SUCCESS", "user1")
     ]
     res3 = engine.process_batch(batch3)
     assert len(res3.alerts) == 0
@@ -139,14 +145,18 @@ def test_dr02_failures_older_than_300s_ignored():
 def test_dr03_admin_access_hours():
     engine = DetectionEngine()
 
-    # Tuesday 10:00 -> allowed -> no alert
-    tue_10am = datetime(2026, 10, 13, 10, 0, 0, tzinfo=SAO_PAULO_TZ)
-    res1 = engine.process_batch([Log("e1", "srv-01", tue_10am, "ADMIN_ACCESS", "admin1")])
+    # Tuesday 08:00 -> inclusive allowed -> no alert
+    # Process this boundary case first to avoid rejection by the batch ordering rule.
+    tue_08am = datetime(2026, 10, 13, 8, 0, 0, tzinfo=SAO_PAULO_TZ)
+    res1 = engine.process_batch([Log("e1", "srv-01", tue_08am, "ADMIN_ACCESS", "admin1")])
+    assert len(res1.accepted_logs) == 1
+    assert len(res1.rejected_logs) == 0
     assert len(res1.alerts) == 0
 
-    # Tuesday 08:00 -> inclusive allowed -> no alert
-    tue_08am = datetime(2026, 10, 13, 8, 0, 0, tzinfo=SAO_PAULO_TZ)
-    res2 = engine.process_batch([Log("e2", "srv-01", tue_08am, "ADMIN_ACCESS", "admin1")])
+    # Tuesday 10:00 -> allowed -> no alert
+    tue_10am = datetime(2026, 10, 13, 10, 0, 0, tzinfo=SAO_PAULO_TZ)
+    res2 = engine.process_batch([Log("e2", "srv-01", tue_10am, "ADMIN_ACCESS", "admin1")])
+    assert len(res2.accepted_logs) == 1
     assert len(res2.alerts) == 0
 
     # Tuesday 18:00 -> outside allowed (18:00 is exclusive) -> triggers DR03
