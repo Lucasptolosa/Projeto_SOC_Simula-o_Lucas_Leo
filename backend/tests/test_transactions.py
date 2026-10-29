@@ -1,41 +1,15 @@
 
-from uuid import uuid4
-
 import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, insert, select
+from sqlalchemy import insert, select
 
-from app.core.config import Settings
-from app.db.session import create_db_engine, create_session_factory
-
-
-@pytest.fixture
-def tabela_transacoes(test_db_settings: Settings):
-    engine = create_db_engine(test_db_settings)
-    metadata = MetaData()
-
-    # Evita conflitos entre tabelas de teste.
-    tabela = Table(
-        f"test_transaction_{uuid4().hex}",
-        metadata,
-        Column("id", Integer, primary_key=True),
-        Column("valor", String(50), nullable=False),
-    )
-
-    try:
-        metadata.create_all(engine)
-        yield engine, tabela
-    finally:
-        # Remove os dados temporários.
-        try:
-            metadata.drop_all(engine)
-        finally:
-            engine.dispose()
+from app.db import session as db_session
+from app.db.session import create_session_factory
 
 
 def test_commit_persiste_registro(tabela_transacoes):
     # Arrange
-    engine, tabela = tabela_transacoes
-    factory = create_session_factory(engine)
+    connection, tabela = tabela_transacoes
+    factory = create_session_factory(connection)
 
     # Act
     with factory() as session:
@@ -53,8 +27,8 @@ def test_commit_persiste_registro(tabela_transacoes):
 
 def test_rollback_descarta_registro(tabela_transacoes):
     # Arrange
-    engine, tabela = tabela_transacoes
-    factory = create_session_factory(engine)
+    connection, tabela = tabela_transacoes
+    factory = create_session_factory(connection)
 
     # Act
     with factory() as session:
@@ -68,3 +42,31 @@ def test_rollback_descarta_registro(tabela_transacoes):
 
     # Assert
     assert resultado is None
+
+
+@pytest.mark.parametrize("com_excecao", [False, True])
+def test_dependencia_descarta_gravacao_pendente(
+    tabela_transacoes, monkeypatch, com_excecao
+):
+    # Arrange
+    connection, tabela = tabela_transacoes
+    factory = create_session_factory(connection)
+    monkeypatch.setattr(db_session, "get_session_factory", lambda: factory)
+    dependency = db_session.get_session()
+    session = next(dependency)
+    session.execute(insert(tabela).values(id=1, valor="pendente"))
+
+    # Act
+    if com_excecao:
+        with pytest.raises(RuntimeError, match="Falha simulada"):
+            dependency.throw(RuntimeError("Falha simulada"))
+    else:
+        dependency.close()
+
+    # Assert
+    with factory() as verification_session:
+        resultado = verification_session.execute(
+            select(tabela.c.valor).where(tabela.c.id == 1)
+        ).scalar_one_or_none()
+    assert resultado is None
+    assert not session.in_transaction()
