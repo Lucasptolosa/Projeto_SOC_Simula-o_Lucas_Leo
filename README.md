@@ -359,12 +359,12 @@ ocultos. Testes cobrem também a ausência de segredos nessas mensagens.
 - RNF01: verificação Argon2id, preservando o armazenamento da entrega Users.
 - RNF02/RF03: autenticação no servidor e infraestrutura RBAC disponíveis;
   falta aplicar a matriz a todos os endpoints de negócio.
-- RF19.2: usuário inativo é bloqueado a cada acesso; endpoint de desativação
-  e revogação definitiva de todas as sessões nessa operação ainda pendem.
+- RF19.2: usuário inativo é bloqueado a cada acesso; o gerenciamento
+  administrativo abaixo desativa a conta e revoga suas sessões definitivamente.
 - RNF09: tratamento técnico de falhas e sigilo; fluxos futuros de importação
   deverão reutilizar o tratamento e verificar seus próprios cenários.
 
-Não há cadastro público, gerenciamento administrativo, UI de login,
+Não há cadastro público, UI de login,
 limitação distribuída de tentativas ou renovação automática de sessão.
 As integrações usam exclusivamente `mini_soc_test`, com schemas isolados e
 rollback, incluindo comparação entre migration e metadata. Não comprovam
@@ -435,13 +435,14 @@ simular mudança de papel e inatividade diretamente no banco.
 
 RF03 e RNF02 estão atendidos pela infraestrutura reutilizável e pelos
 cenários isolados, mas não são declarados integralmente concluídos no MVP.
-Os endpoints de Users, Assets, Logs, Detection Rules, Alerts, Investigations,
+Os endpoints de Assets, Logs, Detection Rules, Alerts, Investigations,
 Incidents, Dashboard e Audit Logs ainda precisam integrar as dependências
 apropriadas quando forem implementados. Login, consulta do próprio perfil
 e logout continuam com as proteções de autenticação/CSRF existentes, sem
 restrição administrativa adicional. O health check permanece público.
+As rotas administrativas de Users da Issue #21 já usam ADMIN explicitamente.
 
-Esta entrega não cria endpoints de negócio, alteração de papéis, auditoria,
+Essa entrega de infraestrutura RBAC não criou endpoints de negócio, alteração de papéis, auditoria,
 JWT, tabelas ou migrations e não altera o código da Pessoa 2. O app de
 produção não registra automaticamente as permissões da tabela acima: cada
 rota futura precisa declarar sua dependência explicitamente.
@@ -451,6 +452,119 @@ integrado somente em `codex/persistencia-users`; a main ainda não possuía
 autenticação. Por isso, `feat/autorizacao-papeis` usa `codex/autenticacao`
 como base do PR, preservando o diff somente de RBAC. A promoção da
 autenticação para main e a reconciliação posterior da pilha seguem pendentes.
+
+## Gerenciamento administrativo de Users — Issue #21
+
+Todas as rotas abaixo exigem sessão válida, User ACTIVE, papel ADMIN,
+Origin configurado e X-CSRF-Token da sessão. Não existe cadastro público.
+As respostas contêm somente id, username, role e status, com no-store.
+
+| Endpoint | Entrada e resultado |
+|---|---|
+| `POST /users` | JSON username, role (ADMIN/ANALYST) e password; cria UUID e ACTIVE; retorna 201. |
+| `PATCH /users/{user_id}` | JSON com username e/ou role de outro User; preserva UUID e associações; retorna 200. |
+| `POST /users/{user_id}/deactivate` | Desativa sem excluir, revoga todas as sessões e retorna 200. |
+
+Campos desconhecidos, valores nulos em alteração, papel inválido e valores
+vazios são rejeitados com 422 genérico, sem eco do corpo. Username duplicado
+retorna 409, inclusive pela constraint do banco. User inexistente retorna
+404. Um PATCH deve informar ao menos um campo; repetir valores já atuais
+retorna 200 sem gerar auditoria adicional. Desativação de conta já INACTIVE
+retorna 409 sem novo registro. Não há alteração de senha ou reativação.
+
+RF30 cobre outra conta: alteração do próprio username ou papel é recusada
+com 403. RF25 impede a alteração do próprio papel mesmo quando há outros
+administradores. A autodesativação é permitida somente quando resta outro
+ADMIN ACTIVE. O último ADMIN ACTIVE não pode ser desativado (409); sua
+mudança de papel também é bloqueada pela regra de edição da própria conta.
+
+### Transações e concorrência
+
+As operações usam o mesmo Session/Engine da aplicação. O Engine explicita
+READ COMMITTED: depois de esperar um lock, uma nova consulta vê o estado
+confirmado atual. O serviço obtém pg_advisory_xact_lock com chave fixa de
+escrita de Users, reconsulta o autor e depois bloqueia a linha do alvo com
+FOR UPDATE. A contagem de administradores ocorre dentro dessa seção
+serializada. Assim, duas requisições não aprovam a remoção de administradores
+com base na mesma contagem antiga. O lock termina no commit/rollback.
+
+Todos os futuros caminhos que alterem papel/estado de User devem reutilizar
+esse protocolo de serialização. Ele protege as operações do servidor, não
+escritas arbitrárias realizadas diretamente por um administrador do banco.
+O lock_timeout da transação é de cinco segundos; uma falha de lock não
+confirma alterações parciais. Não há repetição automática de operações.
+
+O login bloqueia a linha do User antes de verificar credenciais e mantém
+o lock até terminar a transação. A desativação usa o mesmo lock de linha:
+ou um login anterior confirma sua sessão e ela é revogada pela desativação,
+ou a desativação confirma primeiro e o login encontra INACTIVE. Nenhuma
+sessão é emitida usando uma leitura antiga após a revogação dessa conta.
+
+Alteração de estado, revogação e auditoria usam uma única transação. Falha
+em qualquer etapa reverte tudo. Sessões revogadas continuam inválidas mesmo
+se o estado for restaurado por um procedimento externo; isso é testado
+sem adicionar endpoint de reativação. Alteração de papel vale na próxima
+requisição autenticada, sem copiar papéis para cookies ou sessões.
+
+### Contrato compartilhado de auditoria
+
+Audit Log não existia nas branches remotas verificadas. O módulo
+`app/audit` adiciona a estrutura mínima compartilhada e a função interna
+`append_audit`, que apenas acrescenta um registro na Session recebida, sem
+commit próprio. Quem executa a operação deve confirmar ou reverter a
+alteração de negócio e a auditoria juntas.
+
+| Campo | Contrato |
+|---|---|
+| id | UUID do registro, gerado na aplicação. |
+| author_id | UUID do User autor; FK RESTRICT preserva a associação histórica. |
+| action | Ação definida pelo serviço, nunca copiada de entrada livre do cliente. |
+| entity_type | Tipo de entidade; nesta entrega USER. |
+| entity_id | Identificador textual, permitindo UUIDs de User e identificadores futuros de outros módulos. |
+| occurred_at | Data/hora UTC com fuso. |
+| old_role / new_role | Ambos nulos ou ambos preenchidos com ADMIN/ANALYST; somente quando há mudança de papel. |
+
+As ações desta entrega são USER_CREATED, USER_UPDATED e USER_DEACTIVATED.
+Cada operação efetiva gera exatamente um registro. Alterar username e
+papel juntos gera um único USER_UPDATED com os dois papéis, conforme RF26.
+Não existe campo livre de payload ou senha, token ou hash no registro.
+
+Assets, Detection Rules, Alerts e Incidents poderão usar append_audit com
+suas ações e identificadores no futuro, preservando a transação do serviço.
+Somente operações de Users são auditadas agora. Não existem endpoints de
+alteração/exclusão de Audit Logs, nem consulta de auditoria (RF28 pendente).
+RNF04 é atendido pelas interfaces disponibilizadas; não há trigger ou
+privilégio SQL prometendo imutabilidade contra acesso direto ao PostgreSQL.
+
+### Migration, validação e requisitos
+
+`0003_create_audit_logs` depende de `0002_create_auth_sessions` e cria apenas
+audit_logs com suas constraints. Nenhuma tabela de Users/sessões é recriada.
+O metadata compartilha Base; o downgrade destrutivo é bloqueado. Revise a
+migration antes de aplicá-la. Nesta entrega ela é executada somente nos
+schemas isolados dos testes em mini_soc_test, com rollback, sem aplicação
+em desenvolvimento. A comparação automática de metadata deve permanecer
+sem diferenças e o Alembic com uma única head.
+
+Os testes incluem RBAC e CSRF nas três rotas, Argon2id, duplicação, edição,
+último ADMIN, revogação, auditoria única e rollback de falhas após flush.
+O teste de concorrência usa duas transações físicas de PostgreSQL: uma
+espera pelo lock da outra e só prossegue após sua liberação. A preservação
+do último ADMIN é verificada com operações subsequentes sobre o mesmo
+estado. Não é declarado um teste end-to-end de duas mutações HTTP paralelas
+em dados compartilhados: isso exigiria confirmar dados fora dos schemas
+transacionais reversíveis usados pela suíte. Não há limpeza destrutiva.
+
+RF19.1, RF19.2, RF25, RF26, RF30 e RF31 são implementados para estes fluxos.
+RF15.1 cobre Users; Assets e regras continuam pendentes. RNF01 e RNF02/RF03
+são aplicados nestas rotas, sem declarar a matriz completa do MVP atendida.
+Listagem de Users, reset de senha, reativação, UI, RF28 e auditoria dos
+outros módulos permanecem fora desta entrega. spec.md e ADR são preservados.
+
+Integração: PR #20 propõe codex/autenticacao -> main usando o commit
+existente de autenticação, sem duplicação. O gerenciamento de Users usa
+feat/autorizacao-papeis como base enquanto o PR #19 estiver aberto. Nenhum
+merge é executado automaticamente por esta entrega.
 
 ## Estado da entrega de persistência — Issue #7
 
