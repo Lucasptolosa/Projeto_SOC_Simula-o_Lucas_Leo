@@ -532,7 +532,7 @@ Não existe campo livre de payload ou senha, token ou hash no registro.
 Assets, Detection Rules, Alerts e Incidents poderão usar append_audit com
 suas ações e identificadores no futuro, preservando a transação do serviço.
 Somente operações de Users são auditadas agora. Não existem endpoints de
-alteração/exclusão de Audit Logs, nem consulta de auditoria (RF28 pendente).
+alteração/exclusão de Audit Logs; a consulta RF28 está descrita na Issue #23 abaixo.
 RNF04 é atendido pelas interfaces disponibilizadas; não há trigger ou
 privilégio SQL prometendo imutabilidade contra acesso direto ao PostgreSQL.
 
@@ -558,13 +558,101 @@ transacionais reversíveis usados pela suíte. Não há limpeza destrutiva.
 RF19.1, RF19.2, RF25, RF26, RF30 e RF31 são implementados para estes fluxos.
 RF15.1 cobre Users; Assets e regras continuam pendentes. RNF01 e RNF02/RF03
 são aplicados nestas rotas, sem declarar a matriz completa do MVP atendida.
-Listagem de Users, reset de senha, reativação, UI, RF28 e auditoria dos
-outros módulos permanecem fora desta entrega. spec.md e ADR são preservados.
+Reset de senha, reativação, UI e auditoria dos outros módulos permanecem
+fora desta entrega. Listagem de Users e RF28 são adicionados na Issue #23.
+spec.md e ADR são preservados.
 
 Integração: PR #20 propõe codex/autenticacao -> main usando o commit
 existente de autenticação, sem duplicação. O gerenciamento de Users usa
 feat/autorizacao-papeis como base enquanto o PR #19 estiver aberto. Nenhum
 merge é executado automaticamente por esta entrega.
+
+## Consultas administrativas — Issue #23
+
+As duas consultas exigem sessão válida, User ACTIVE e papel ADMIN,
+reutilizando get_current_user e require_roles. Usuário sem autenticação
+válida recebe 401; ANALYST recebe 403. São operações GET sem escrita,
+portanto não exigem Origin ou token CSRF. As escritas anteriores mantêm
+suas verificações, e CORS não é liberado. As respostas usam no-store.
+
+| Endpoint | Conteúdo e ordenação |
+|---|---|
+| `GET /users` | id, username, role e status; username ASC e id ASC. |
+| `GET /audit-logs` | id, author_id, action, entity_type, entity_id, occurred_at, old_role e new_role; occurred_at DESC e id DESC. |
+
+GET /users é uma funcionalidade administrativa complementar para a futura
+interface. Não existe um RF específico de listagem de Users na spec, e
+esta entrega não atribui um requisito inexistente à funcionalidade.
+
+Em GET /users, os filtros opcionais role (ADMIN/ANALYST) e status
+(ACTIVE/INACTIVE) são combinados com AND. O total representa somente os
+registros correspondentes. User INACTIVE pode aparecer na listagem,
+mas não pode autenticar-se nem consultar os endpoints.
+
+### Paginação e parâmetros
+
+Ambos aceitam page, de 1 a 10.000, e page_size, de 1 a 100. Os padrões são
+page=1 e page_size=20. Offset e limite são aplicados pelo PostgreSQL, sem
+carregar a lista completa para paginar em Python. Uma página válida além
+do fim retorna items vazio e mantém o total, sem erro 404.
+
+As respostas têm o mesmo envelope:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+Exemplos de consulta: `/users?role=ANALYST&status=INACTIVE&page_size=20`
+e `/audit-logs?page=2&page_size=20`. Papel/estado inválidos, páginas fora
+dos limites, valores não inteiros e parâmetros desconhecidos retornam
+422 genérico, sem eco de entradas. Não há filtros extras de auditoria.
+
+A ordenação total inclui UUID para desempatar; em auditoria, dois eventos
+com occurred_at igual mantêm uma ordem determinística. Isso não cria um
+snapshot entre requisições. Total e itens usam SELECTs separados em READ
+COMMITTED: inserções/alterações concorrentes podem mudar páginas ou totais.
+Paginação por cursor ou snapshot estável não faz parte desta entrega.
+
+### Sigilo, preservação e arquitetura
+
+Os repositórios selecionam explicitamente apenas as colunas públicas.
+Schemas Pydantic controlam os campos de resposta; Users não incluem
+password_hash nem dados de sessões. Auditoria retorna o identificador do
+autor, sem juntar credenciais ou dados privados do User. old_role e
+new_role são nulos quando não há mudança de papel no evento persistido.
+
+As consultas não executam commit, não alteram os registros e não criam
+Audit Logs. O teste de leitura verifica os comandos SQL emitidos e compara
+os registros completos antes/depois. Não há POST/PATCH/PUT/DELETE de
+auditoria: tentativas na coleção recebem 405 e não modificam dados; as
+rotas de detalhe de mutação continuam inexistentes. RNF04 cobre as APIs
+disponibilizadas, sem prometer imutabilidade contra SQL direto no banco.
+
+API, validação de parâmetros, serviços e repositórios permanecem separados.
+O módulo compartilhado core/pagination contém apenas os limites de entrada
+e o envelope de resposta tipado; não adiciona um framework de consultas.
+User, AuditLog, Session Factory e os mecanismos de segurança são reutilizados.
+Não há migration, dependência externa ou alteração na estrutura do banco.
+
+RF28 é implementado pela consulta dos Audit Logs persistidos. RNF02/RF03
+são aplicados às duas rotas; a matriz inteira do MVP ainda depende das
+integrações dos demais módulos. RNF04 é preservado pela ausência de APIs
+de mutação e pelos testes de leitura sem efeitos colaterais.
+
+Os testes AAA cobrem ADMIN, ANALYST e anônimo, ordenação, filtros AND,
+paginação após filtros, páginas vazias, limites, desempate, campos corretos,
+sigilo e proteção contra mutação. Integração exclusivamente em mini_soc_test,
+com schemas isolados e rollback, preservando as regressões anteriores.
+
+feat/consultas-administrativas usa feat/gerenciamento-usuarios como base
+enquanto #22 estiver aberto. A ordem proposta continua #20 (autenticação),
+reconciliação de #19 (RBAC), #22 (gerenciamento) e o PR destas consultas.
+Nenhum merge ou reescrita de histórico é realizado automaticamente.
 
 ## Estado da entrega de persistência — Issue #7
 

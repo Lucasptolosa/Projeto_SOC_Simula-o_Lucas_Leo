@@ -83,3 +83,11 @@ def deactivate_user(db: Session, author_id: UUID, user_id: UUID) -> User:
     append_audit(db, author_id=author_id, action="USER_DEACTIVATED", entity_type="USER", entity_id=str(user.id))
     db.flush()
     return user
+
+
+def list_users(
+    db: Session, page: int, page_size: int,
+    role: UserRole | None = None, status: UserStatus | None = None,
+) -> dict:
+    total, rows = repository.list_users(db, page, page_size, role, status)
+    return {"items": rows, "total": total, "page": page, "page_size": page_size}

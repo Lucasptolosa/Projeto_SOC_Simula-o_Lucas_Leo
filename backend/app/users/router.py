@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,8 @@ from app.db.session import get_session
 from app.users import service
 from app.users.models import User, UserRole
 from app.users.schemas import CreateUserInput, PublicUser, UpdateUserInput
+from app.users.schemas import UsersQuery
+from app.core.pagination import Page
 
 
 router = APIRouter(prefix="/users", tags=["Administração de Users"])
@@ -52,6 +54,11 @@ def create_user(payload: CreateUserInput, author: Admin, db: Database):
     return run_user_operation(db, lambda: service.create_user(
         db, author.id, payload.username, payload.role, payload.password.get_secret_value(),
     ))
+
+
+@router.get("", response_model=Page[PublicUser])
+def list_users(params: Annotated[UsersQuery, Query()], author: Admin, db: Database):
+    return service.list_users(db, params.page, params.page_size, params.role, params.status)
 
 
 @router.patch("/{user_id}", response_model=PublicUser)

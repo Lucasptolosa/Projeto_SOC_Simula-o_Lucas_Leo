@@ -33,3 +33,21 @@ def username_taken(db: Session, username: str, except_id: UUID | None = None) ->
     if except_id is not None:
         query = query.where(User.id != except_id)
     return db.scalar(query) is not None
+
+
+def list_users(
+    db: Session, page: int, page_size: int,
+    role: UserRole | None = None, status: UserStatus | None = None,
+):
+    filters = []
+    if role is not None:
+        filters.append(User.role == role)
+    if status is not None:
+        filters.append(User.status == status)
+    total = db.scalar(select(func.count()).select_from(User).where(*filters))
+    # Projeta campos públicos
+    query = select(User.id, User.username, User.role, User.status).where(*filters)
+    rows = db.execute(query.order_by(User.username.asc(), User.id.asc()).offset(
+        (page - 1) * page_size,
+    ).limit(page_size)).mappings().all()
+    return total, rows
