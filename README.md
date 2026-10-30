@@ -338,7 +338,8 @@ A dependência `get_current_user` recupera User pelo cookie, valida
 expiração/revogação e consulta seu estado ACTIVE em cada acesso. Nas
 operações diferentes de GET/HEAD/OPTIONS, exige também Origin e CSRF.
 Reutilize-a nos próximos endpoints protegidos. Ela autentica, mas ainda
-não aplica a matriz de permissões por papéis.
+não aplica sozinha a matriz de permissões por papéis. Para isso, use
+`require_roles`, descrito na seção de autorização abaixo.
 
 Usuário inexistente, senha incorreta e User INACTIVE recebem o mesmo 401:
 `Credenciais inválidas.`. A verificação Argon2id também é realizada com um
@@ -356,8 +357,8 @@ ocultos. Testes cobrem também a ausência de segredos nessas mensagens.
 
 - RF01/RF02: login e negação genérica de credenciais inválidas/inativas.
 - RNF01: verificação Argon2id, preservando o armazenamento da entrega Users.
-- RNF02/RF03: autenticação no servidor pronta; autorização por papel ainda
-  será implementada em Issue própria.
+- RNF02/RF03: autenticação no servidor e infraestrutura RBAC disponíveis;
+  falta aplicar a matriz a todos os endpoints de negócio.
 - RF19.2: usuário inativo é bloqueado a cada acesso; endpoint de desativação
   e revogação definitiva de todas as sessões nessa operação ainda pendem.
 - RNF09: tratamento técnico de falhas e sigilo; fluxos futuros de importação
@@ -373,6 +374,83 @@ como fonte de escopo e arquitetura.
 Enquanto o PR #15 estiver aberto, o PR de autenticação usa
 `codex/persistencia-users` como base. Após sua integração, deve ser
 reconciliado com main e ter a base atualizada, preservando o histórico.
+
+## Autorização por papéis — Issue #18
+
+`app/auth/authorization.py` fornece a fábrica `require_roles`. Ela recebe
+somente valores de `UserRole`, cria um conjunto imutável de papéis permitidos
+e retorna uma dependência FastAPI. A dependência primeiro reutiliza
+`get_current_user`, que consulta a sessão e o User no banco, e depois
+compara o papel atual com os papéis explicitamente permitidos.
+
+Para configurar uma rota real, inclua na sua lista `dependencies` uma
+das dependências abaixo, conforme a operação da seção 2 de spec.md:
+
+```python
+from fastapi import Depends
+from app.auth.authorization import require_roles
+from app.users.models import UserRole
+
+admin_only = Depends(require_roles(UserRole.ADMIN))
+analyst_only = Depends(require_roles(UserRole.ANALYST))
+shared = Depends(require_roles(UserRole.ADMIN, UserRole.ANALYST))
+```
+
+Se o handler também precisar do User, utilize
+`Annotated[User, Depends(require_roles(...))]` em sua assinatura, escolhendo
+explicitamente os papéis. Não passe strings, nomes recebidos do cliente ou
+uma lista vazia: configuração inválida é rejeitada com ValueError durante
+o registro da rota. Papéis repetidos são consolidados, sem ampliar acesso.
+
+| Operação futura | Papéis permitidos |
+|---|---|
+| Consultar Logs | ADMIN e ANALYST |
+| Importar Logs | ADMIN |
+| Cadastrar, alterar e desativar Users ou Assets | ADMIN |
+| Ativar/desativar Detection Rules | ADMIN |
+| Consultar Audit Logs | ADMIN |
+| Consultar/investigar/descartar/escalonar Alerts | ANALYST |
+| Investigar e registrar evidências | ANALYST |
+| Consultar, abrir, tratar e resolver Incidents | ANALYST |
+| Consultar Dashboard | ANALYST |
+
+ADMIN não herda permissões de ANALYST. Uma operação compartilhada precisa
+listar ambos. O papel não vem do cookie, JSON, query string ou header do
+cliente, mas do User consultado no banco. Mudanças no papel são refletidas
+no próximo acesso, sem exigir novo login ou copiar permissões para a sessão.
+
+Sem autenticação válida, a dependência preserva o HTTP 401 de
+`get_current_user`, incluindo sessão expirada/revogada e User INACTIVE.
+Com autenticação válida, um papel não permitido recebe HTTP 403 com
+`Permissão insuficiente.`. Em ambos os casos, o handler não é executado.
+Nas escritas, Origin e CSRF continuam obrigatórios antes da autorização;
+uma configuração RBAC não substitui nem contorna essas verificações.
+
+### Evidência e integrações pendentes
+
+Os testes criam aplicações FastAPI próprias com rotas temporárias
+`/probe/*`, sem adicioná-las ao app de produção. Usam as sessões reais e
+Users persistidos nos schemas isolados de `mini_soc_test`, inclusive para
+simular mudança de papel e inatividade diretamente no banco.
+
+RF03 e RNF02 estão atendidos pela infraestrutura reutilizável e pelos
+cenários isolados, mas não são declarados integralmente concluídos no MVP.
+Os endpoints de Users, Assets, Logs, Detection Rules, Alerts, Investigations,
+Incidents, Dashboard e Audit Logs ainda precisam integrar as dependências
+apropriadas quando forem implementados. Login, consulta do próprio perfil
+e logout continuam com as proteções de autenticação/CSRF existentes, sem
+restrição administrativa adicional. O health check permanece público.
+
+Esta entrega não cria endpoints de negócio, alteração de papéis, auditoria,
+JWT, tabelas ou migrations e não altera o código da Pessoa 2. O app de
+produção não registra automaticamente as permissões da tabela acima: cada
+rota futura precisa declarar sua dependência explicitamente.
+
+Na verificação desta entrega, #15 estava integrado à main, mas #17 foi
+integrado somente em `codex/persistencia-users`; a main ainda não possuía
+autenticação. Por isso, `feat/autorizacao-papeis` usa `codex/autenticacao`
+como base do PR, preservando o diff somente de RBAC. A promoção da
+autenticação para main e a reconciliação posterior da pilha seguem pendentes.
 
 ## Estado da entrega de persistência — Issue #7
 
