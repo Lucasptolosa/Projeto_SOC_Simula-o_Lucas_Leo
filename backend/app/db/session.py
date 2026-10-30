@@ -23,6 +23,7 @@ def create_db_engine(settings: Settings) -> Engine:
         url,
         pool_pre_ping=True,
         hide_parameters=True,
+        isolation_level="READ COMMITTED",
         connect_args={"connect_timeout": 5},
     )
 
