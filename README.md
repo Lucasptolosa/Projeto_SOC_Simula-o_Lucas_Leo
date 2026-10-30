@@ -157,7 +157,11 @@ Os testes de integração utilizam o banco `mini_soc_test`.
 Eles exigem PostgreSQL disponível e o arquivo `backend/.env.test` configurado.
 Os testes transacionais usam tabelas `TEMPORARY` no schema `pg_temp`, exclusivas
 da conexão e removidas automaticamente pelo PostgreSQL ao desconectá-la.
-Não executam `DROP TABLE`, migrations nem alterações em tabelas permanentes.
+Os testes de Users criam um schema com nome aleatório em `mini_soc_test`,
+aplicam a migration nesse schema dentro de uma transação externa e isolam
+cada sessão com savepoints. Ao terminar, revertem a transação externa,
+incluindo o schema criado. Não executam `DROP`, `DELETE` ou alterações em
+tabelas preexistentes. Nunca apontam para `mini_soc_dev`.
 
 As sessões são disponibilizadas por `get_session()`. Cada serviço deve
 confirmar explicitamente sua transação com `session.commit()` ou usar
@@ -182,13 +186,84 @@ python -m alembic upgrade head
 
 Os arquivos de migrations ficam em `backend/migrations/versions/`.
 
-Nesta entrega de infraestrutura ainda não existem revisões nem modelos ORM
-de entidades. Portanto, não há esquema de negócio a aplicar. O
-`target_metadata` permanece `None`; a integração com o metadata dos modelos
-e as respectivas migrations será feita nas Issues das entidades, antes de
-utilizar `alembic revision --autogenerate`. Migrations offline ainda não são
-suportadas. A URL de conexão é construída a partir de `Settings`; o valor
-genérico de `sqlalchemy.url` em `alembic.ini` não é utilizado.
+A revisão inicial `0001_create_users` cria somente a tabela `users`, com
+chave UUID, username único, papel, estado e hash de senha. Revise o arquivo
+antes de aplicar em seu ambiente. Ela não altera tabelas de outros módulos
+nem cria contas. Se já existir uma tabela `users` não gerenciada pelo
+Alembic, interrompa a instalação e concilie o esquema; não recrie a tabela.
+
+O `target_metadata` aponta para a Base declarativa compartilhada e registra
+o modelo User, permitindo comparação do esquema e autogenerate. Não há
+Enum nativo do PostgreSQL: papel e estado usam texto com CHECKs nomeados,
+evitando tipos compartilhados ou objetos adicionais nesta migration.
+
+O downgrade dessa revisão é bloqueado para impedir a exclusão de Users.
+Uma eventual reversão exige planejamento específico com preservação dos
+dados. Migrations offline ainda não são suportadas. A URL de conexão é
+construída a partir de `Settings`; o valor genérico de `sqlalchemy.url` em
+`alembic.ini` não é utilizado.
+
+## Users e Administrator inicial — Issue #14
+
+O modelo `app/users/models.py` persiste somente `id`, `username`, `role`,
+`status` e `password_hash`. UUIDs são gerados na aplicação. Username é
+obrigatório, não pode conter apenas espaços e é preservado exatamente como
+informado, sem conversão de maiúsculas/minúsculas. A unicidade é aplicada
+pelo banco; `a` e `A` são nomes distintos. Não foi criada uma política nova
+de comprimento de senha ou username ausente da spec.
+
+Os papéis permitidos são `ADMIN` e `ANALYST`; os estados são `ACTIVE` e
+`INACTIVE`, com padrão `ACTIVE`. As restrições de unicidade, nulidade,
+papel, estado e formato de hash também existem no banco, além da validação
+ORM. O CHECK de hash confere formato; ele não comprova que o hash foi
+produzido a partir de uma senha. O procedimento usa exclusivamente a função
+de hash da aplicação, nunca aceita um hash fornecido pelo operador.
+
+Após configurar o banco e aplicar a migration, execute em `backend/`, num
+terminal interativo com o ambiente virtual ativo:
+
+```powershell
+python -m app.users.create_admin
+```
+
+O comando solicita o nome do Administrator e a senha duas vezes, sem eco.
+Não aceita argumentos, senha por pipe ou credenciais fixas. Use uma senha
+própria e mantenha-a fora de arquivos, histórico do terminal e Git.
+Senha vazia ou composta somente de espaços é recusada; os demais caracteres
+da senha são preservados, sem normalização ou truncamento.
+
+O procedimento cria um `ADMIN ACTIVE` somente se não existir qualquer User.
+A criação inteira ocorre numa transação. Um lock de tabela serializa
+tentativas concorrentes e impede inserções concorrentes durante a checagem.
+Se já houver conta, o comando termina com erro e não redefine senha, papel
+ou estado. Não use o bootstrap como ferramenta de recuperação de contas.
+O acesso ao terminal e às credenciais do PostgreSQL deve ser restrito ao
+operador responsável pela instalação.
+
+O hash usa Argon2id v19 com salt aleatório de 16 bytes por geração, saída de
+32 bytes, memória de 65.536 KiB, três iterações e paralelismo quatro. Esses
+parâmetros correspondem ao perfil de menor memória do RFC 9106 na
+[documentação do argon2-cffi](https://argon2-cffi.readthedocs.io/en/stable/parameters.html).
+O salt e os parâmetros fazem parte do hash codificado; não há coluna de
+senha original. Parâmetros SQL são ocultados nas representações de erros
+do Engine, e o comando mostra mensagens genéricas, sem senha ou hash.
+
+Rastreabilidade desta entrega:
+
+- **RNF01:** Argon2id, salt individual e armazenamento exclusivo do hash.
+- **RF19.1 (parcial):** estrutura persistente, unicidade, papel válido e
+  estado inicial; o endpoint de cadastro administrativo ainda não existe.
+- **Seção 2 / CE01:** procedimento documentado de Administrator inicial.
+- **RNF03 (parcial):** leitura e integridade de Users verificadas no
+  PostgreSQL. A suíte usa savepoints numa transação externa revertida;
+  não demonstra recuperação após reinício do servidor ou da aplicação.
+- **RNF09 (apoio):** ocultação de parâmetros e erros do bootstrap; o
+  tratamento completo de logs técnicos do servidor continua pendente.
+
+Esta entrega não adiciona login, autorização, cadastro público, endpoints
+administrativos, auditoria administrativa nem regra do último ADMIN.
+Esses comportamentos permanecem nas respectivas Issues. A instalação local
+real não cria contas automaticamente durante migrations ou testes.
 
 ## Estado da entrega de persistência — Issue #7
 
@@ -196,7 +271,7 @@ genérico de `sqlalchemy.url` em `alembic.ini` não é utilizado.
   Engine e fábrica de sessões centralizados e estrutura inicial do Alembic.
 - Testes de conexão, validação da configuração, commit, rollback e descarte
   de gravações pendentes ao encerrar a dependência de sessão.
-- **RNF03:** infraestrutura disponível; a recuperação das entidades após
+- **RNF03:** infraestrutura disponível; a recuperação completa das entidades após
   reinício da aplicação ainda precisa ser implementada e verificada.
 - **RF11:** suporte a transações disponível; o escalonamento atômico de Alert
   para Incident permanece para a Issue desse fluxo.

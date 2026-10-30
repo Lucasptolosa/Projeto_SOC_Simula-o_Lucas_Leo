@@ -5,6 +5,8 @@ from alembic import context
 
 from app.core.config import Settings
 from app.db.session import create_db_engine
+from app.db.base import Base
+from app.users.models import User
 
 
 config = context.config
@@ -12,24 +14,26 @@ config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+target_metadata = Base.metadata
+
+
+def configure_connection(connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
 
 
 def run_migrations_online() -> None:
+    supplied_connection = config.attributes.get("connection")
+    if supplied_connection is not None:
+        configure_connection(supplied_connection)
+        return
     # Cria conexão
     engine = create_db_engine(Settings())
 
     try:
         with engine.connect() as connection:
-            # Configura migrações
-            context.configure(
-                connection=connection,
-                target_metadata=target_metadata,
-            )
-
-            # Executa migrações
-            with context.begin_transaction():
-                context.run_migrations()
+            configure_connection(connection)
     finally:
         # Libera conexões
         engine.dispose()
