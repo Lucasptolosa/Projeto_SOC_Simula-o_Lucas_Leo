@@ -260,10 +260,119 @@ Rastreabilidade desta entrega:
 - **RNF09 (apoio):** ocultação de parâmetros e erros do bootstrap; o
   tratamento completo de logs técnicos do servidor continua pendente.
 
-Esta entrega não adiciona login, autorização, cadastro público, endpoints
+Essa entrega de Users não adicionou login, autorização, cadastro público, endpoints
 administrativos, auditoria administrativa nem regra do último ADMIN.
 Esses comportamentos permanecem nas respectivas Issues. A instalação local
 real não cria contas automaticamente durante migrations ou testes.
+
+## Autenticação e sessões — Issue #16
+
+O módulo `app/auth` reutiliza User e adiciona sessões opacas persistidas no
+servidor. A migration `0002_create_auth_sessions` depende de
+`0001_create_users` e cria somente `auth_sessions`, com FK para Users,
+hash único do token, datas UTC de criação/expiração e revogação opcional.
+Revise ambas antes de executar `python -m alembic upgrade head`.
+O downgrade destrutivo permanece bloqueado. As migrations não criam contas.
+
+Configure a origem exata do navegador em `.env`, incluindo esquema e porta:
+
+```dotenv
+AUTH_ORIGIN=https://seu-host
+AUTH_COOKIE_SECURE=true
+AUTH_SESSION_SECONDS=28800
+```
+
+O padrão é `https://localhost`, cookie Secure e validade absoluta de oito
+horas. A duração aceita valores de 1 a 86.400 segundos. Para desenvolvimento
+local via HTTP, configure explicitamente:
+
+```dotenv
+AUTH_ORIGIN=http://127.0.0.1:8000
+AUTH_COOKIE_SECURE=false
+```
+
+Cookie sem Secure só é aceito em HTTP com host `localhost`, `127.0.0.1`
+ou `::1`. Não use essa exceção fora de loopback. A origem configurada é
+fixa, sem caminho, usuário, senha, query ou fragmento; não é inferida do
+header Host ou de headers de proxy. Não há CORS liberado nesta entrega.
+
+| Endpoint | Comportamento |
+|---|---|
+| `POST /auth/login` | JSON com `username` e `password`, mais header `Origin` correspondente à configuração. Retorna dados públicos e `csrf_token`; envia o token de sessão somente por cookie. |
+| `GET /auth/me` | Cookie válido retorna `id`, `username`, `role`, `status` e `csrf_token`. Nunca retorna hash de senha ou token de sessão. |
+| `POST /auth/logout` | Exige cookie, `Origin` válido e `X-CSRF-Token`. Revoga a sessão no servidor, remove o cookie e retorna 204. |
+
+O cookie `mini_soc_session` é HttpOnly, SameSite=Strict, Path=/, sem Domain
+e Secure por padrão. Possui Max-Age igual à duração configurada. O servidor
+gera um token aleatório de 256 bits e persiste somente seu SHA-256; não há
+JWT ou token em URL/localStorage. SHA-256 é usado para tokens de alta
+entropia, enquanto as senhas continuam com Argon2id.
+
+Um novo login revoga a sessão apresentada anteriormente e gera outro token,
+reduzindo risco de fixação de sessão. Ele não encerra outras sessões do
+mesmo usuário. A expiração é conferida no servidor, inclusive no instante
+exato do vencimento, independentemente da validade do cookie no navegador.
+Logout revoga antes de remover o cookie, impedindo replay. Registros de
+sessões expiradas ou revogadas são preservados; limpeza automática não foi
+incluída nesta entrega.
+
+### CSRF e uso pelo cliente
+
+Login aceita apenas JSON e exige Origin válido, recusando origens ausentes,
+`null` ou diferentes. Isso protege o login contra requisições cross-site
+do navegador sem criar uma sessão prévia. Após o login, obtenha o
+`csrf_token` retornado e envie-o em `X-CSRF-Token` nas operações autenticadas
+de escrita. Após recarregar a página, recupere-o por `GET /auth/me`.
+
+O token CSRF é HMAC-SHA-256 derivado do segredo da sessão com um rótulo
+fixo; não é o identificador da sessão e não é persistido em claro. A
+comparação usa tempo constante. A política de mesma origem do navegador
+impede que outra origem leia as respostas, e não há configuração CORS
+permitindo essa leitura. SameSite é uma camada adicional, sem substituir
+a validação de Origin ou do token. Essas escolhas seguem as orientações
+de [CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+e [sessões](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+da OWASP.
+
+A dependência `get_current_user` recupera User pelo cookie, valida
+expiração/revogação e consulta seu estado ACTIVE em cada acesso. Nas
+operações diferentes de GET/HEAD/OPTIONS, exige também Origin e CSRF.
+Reutilize-a nos próximos endpoints protegidos. Ela autentica, mas ainda
+não aplica a matriz de permissões por papéis.
+
+Usuário inexistente, senha incorreta e User INACTIVE recebem o mesmo 401:
+`Credenciais inválidas.`. A verificação Argon2id também é realizada com um
+hash fictício quando o username não existe, reduzindo diferenças temporais.
+Sessão ausente, inválida, expirada, revogada ou de usuário inativo recebe
+401 genérico. Uma resposta 403 de CSRF não revoga uma sessão válida.
+
+Respostas de autenticação usam `Cache-Control: no-store`. Erros de validação
+não devolvem o corpo ou senha enviados. Falhas não tratadas retornam 500
+genérico e registram timestamp UTC, rota estática e categoria do erro, sem
+corpo, cookies, tokens, hashes, senha ou traceback. Parâmetros SQL permanecem
+ocultos. Testes cobrem também a ausência de segredos nessas mensagens.
+
+### Limites e rastreabilidade
+
+- RF01/RF02: login e negação genérica de credenciais inválidas/inativas.
+- RNF01: verificação Argon2id, preservando o armazenamento da entrega Users.
+- RNF02/RF03: autenticação no servidor pronta; autorização por papel ainda
+  será implementada em Issue própria.
+- RF19.2: usuário inativo é bloqueado a cada acesso; endpoint de desativação
+  e revogação definitiva de todas as sessões nessa operação ainda pendem.
+- RNF09: tratamento técnico de falhas e sigilo; fluxos futuros de importação
+  deverão reutilizar o tratamento e verificar seus próprios cenários.
+
+Não há cadastro público, gerenciamento administrativo, UI de login,
+limitação distribuída de tentativas ou renovação automática de sessão.
+As integrações usam exclusivamente `mini_soc_test`, com schemas isolados e
+rollback, incluindo comparação entre migration e metadata. Não comprovam
+recuperação após reinício real do banco/aplicação. spec.md e ADR permanecem
+como fonte de escopo e arquitetura.
+
+Enquanto o PR #15 estiver aberto, o PR de autenticação usa
+`codex/persistencia-users` como base. Após sua integração, deve ser
+reconciliado com main e ter a base atualizada, preservando o histórico.
 
 ## Estado da entrega de persistência — Issue #7
 
