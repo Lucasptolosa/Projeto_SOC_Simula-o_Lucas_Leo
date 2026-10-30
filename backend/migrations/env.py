@@ -7,12 +7,13 @@ from app.core.config import Settings
 from app.db.session import create_db_engine
 from app.db.base import Base
 from app.users.models import User
+from app.auth.models import AuthSession
 
 
 config = context.config
 
 if config.config_file_name:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
