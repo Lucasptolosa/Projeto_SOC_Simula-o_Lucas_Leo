@@ -3,6 +3,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, SecretStr, field_validator, model_validator
 
 from app.users.models import UserRole, UserStatus
+from app.core.pagination import PaginationQuery
+
+
+class UsersQuery(PaginationQuery):
+    role: UserRole | None = None
+    status: UserStatus | None = None
 
 
 class UserInput(BaseModel):
