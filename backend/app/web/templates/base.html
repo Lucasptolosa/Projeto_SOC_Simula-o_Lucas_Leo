@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>{% block title %}{{ title | default('Acesso') }}{% endblock %} · Mini SOC</title>
+  <link rel="stylesheet" href="/static/web.css">
+  <script src="/static/web.js" defer></script>
+</head>
+<body data-page="{{ page | default('login') }}">
+  <a class="skip-link" href="#main">Ir para o conteúdo</a>
+  {% block body %}{% endblock %}
+  <noscript><p class="noscript">Ative o JavaScript para autenticar e consultar os dados. As páginas restritas continuam protegidas no servidor.</p></noscript>
+</body>
+</html>
