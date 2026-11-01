@@ -15,6 +15,7 @@ O escopo é definido em [spec.md](spec.md) e a arquitetura no
 - Psycopg
 - Alembic
 - pytest
+- Jinja2, HTML, CSS e JavaScript
 
 ## Pré-requisitos
 
@@ -653,6 +654,157 @@ feat/consultas-administrativas usa feat/gerenciamento-usuarios como base
 enquanto #22 estiver aberto. A ordem proposta continua #20 (autenticação),
 reconciliação de #19 (RBAC), #22 (gerenciamento) e o PR destas consultas.
 Nenhum merge ou reescrita de histórico é realizado automaticamente.
+
+## Interface web — Issue #25
+
+A interface usa Jinja2 com autoescape, HTML, CSS e JavaScript locais no mesmo
+monólito FastAPI (ADR-001). Não exige Node, build ou framework de front-end.
+Jinja2 é a única dependência nova de execução. Playwright é exclusivo dos
+testes de navegador; não participa da aplicação em produção.
+
+| Página | Acesso e comportamento |
+|---|---|
+| `/` | Redireciona para `/app`. |
+| `/login` | Pública; username/senha via JSON em POST /auth/login. |
+| `/app` | Sessão válida e User ACTIVE; identidade/papel por GET /auth/me. |
+| `/app/users` | Somente ADMIN; GET /users, filtros de papel/estado e paginação. |
+| `/app/audit-logs` | Somente ADMIN; GET /audit-logs, paginação e histórico recente primeiro. |
+
+### Acesso local
+
+Instale as dependências atualizadas. Utilize um banco de desenvolvimento já
+preparado pelas migrations anteriores e uma conta criada pelo procedimento
+de Administrator inicial acima. Esta entrega não cria conta, migration ou
+credencial padrão e não aplica migrations automaticamente.
+
+O endereço aberto no navegador deve corresponder exatamente a AUTH_ORIGIN,
+incluindo esquema, host e porta. Para desenvolvimento **exclusivamente em
+loopback HTTP**, configure no ambiente local ignorado pelo Git:
+
+```dotenv
+AUTH_ORIGIN=http://127.0.0.1:8000
+AUTH_COOKIE_SECURE=false
+```
+
+Na pasta backend, execute `python -m uvicorn app.main:app --reload` e abra
+[a página de login](http://127.0.0.1:8000/login). Não troque 127.0.0.1 por
+localhost sem ajustar AUTH_ORIGIN. A permissão existente de cookie sem
+Secure continua limitada a HTTP loopback. Em implantação, use HTTPS, origem
+correta e AUTH_COOKIE_SECURE=true (padrão); não exponha o servidor de
+desenvolvimento ou use esse exemplo HTTP em rede externa.
+
+### Organização e comportamento
+
+`backend/app/web/router.py` contém somente rotas de apresentação. Templates
+em `app/web/templates`: base.html (documento e recursos), login.html,
+shell.html (navegação autenticada), home.html, users.html, audit.html,
+pagination.html (fragmento compartilhado) e forbidden.html. `app/web/static`
+contém web.css e web.js, servidos em /static. Não há consulta SQL nos
+templates ou duplicação dos serviços de negócio.
+
+O servidor reutiliza get_current_user e require_roles. Páginas sem sessão
+válida redirecionam para o login; páginas administrativas negam ANALYST
+com 403 antes de renderizar seu conteúdo. APIs mantêm 401/403 e o contrato
+JSON anterior. O contexto Jinja contém somente flags/título/nome da página,
+nunca o objeto ORM, senha ou tokens. A identidade é recuperada por /auth/me.
+
+ADMIN encontra consultas reais de Users e auditoria. ANALYST vê sua conta
+e uma indicação de que ainda não há consultas disponíveis nesta entrega;
+não há links fictícios de Alerts/Investigations ou dashboard analítico.
+Users permanece somente leitura; criar, editar e desativar pela interface
+fica para outra Issue, mesmo com as operações já existentes na API.
+
+Users mostra username, ADMIN/ANALYST e ACTIVE/INACTIVE textuais, filtros
+combinados e controles de página. Mudar filtros ou tamanho reinicia na
+página 1. O padrão é 20 itens, com opções 10/20/50/100 e teto de página
+10.000, respeitando a API. Auditoria mostra o **identificador do autor**,
+ação, tipo/identificador da entidade, horário e papel anterior/novo quando
+presentes. Não inventa nome histórico do autor nem busca usuários por linha.
+A ordem retornada pela API é preservada (occurred_at DESC, id DESC).
+Datas são formatadas em português no fuso America/Sao_Paulo, com indicação
+na tela; o timestamp persistido não é alterado. Ausência de valores aparece
+como travessão. As limitações de paginação concorrente da API permanecem.
+
+### Segurança e erros
+
+- fetch usa credentials: same-origin e cache: no-store, sem CORS novo.
+- O navegador fornece Origin no login/logout. O JavaScript não define esse
+  header e não cria outro mecanismo de autenticação.
+- Sessão permanece em cookie HttpOnly/Secure/SameSite=Strict. Não há JWT,
+  token de sessão em storage, URLs ou HTML. O token CSRF de /auth/me fica
+  somente na memória do script e é enviado no header X-CSRF-Token do logout.
+- Logout só confirma a saída após revogação no servidor; falhas mostram
+  feedback e não simulam sucesso. 401 conduz ao login. Expiração, revogação
+  e INACTIVE são revalidados no servidor em cada acesso; ao retornar à aba,
+  /auth/me também é reconsultado. Páginas restauradas do histórico recarregam.
+- Senha é limpa do campo após cada tentativa. Login inválido/inativo recebe
+  mensagem genérica; erros de API não exibem detalhes internos. Requisições
+  têm limite de espera de 15 segundos e permitem nova tentativa.
+- Sem JavaScript inline ou innerHTML. Dados de API são inseridos usando
+  textContent. CSP das páginas limita scripts/estilos/conexões à própria
+  origem, bloqueia frames, base e submissão nativa de formulário. Sem JS,
+  um aviso é mostrado e credenciais não são submetidas por navegação.
+- Páginas e recursos usam no-store, nosniff e no-referrer. Nenhum dado
+  de conta/sessão é embutido nos arquivos estáticos.
+
+Os controles visuais complementam o RBAC das páginas e APIs; não concedem
+permissão. A consulta de auditoria não cria, edita nem exclui eventos.
+RF01/RF02 são integrados pela tela, RF03/RNF02 pela autorização deste escopo,
+RF28 pela consulta e RNF04 pela preservação. RNF01/RNF09 e RF19.2 permanecem
+protegidos pelos componentes existentes e testes. A listagem de Users é
+complementar, sem RF específico; a matriz inteira do MVP continua pendente.
+
+### Testes e validação visual
+
+Após instalar requirements-dev.txt, instale uma vez o navegador de testes:
+
+```powershell
+python -m playwright install chromium
+python -m pytest tests/test_web.py -q
+python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70 -q
+```
+
+Os testes pytest executam o JavaScript em Chromium real. O transporte das
+requisições é direcionado ao app ASGI via TestClient, com os cookies e headers
+Origin produzidos pelo navegador, sem servidor externo ou certificado de
+teste. As APIs e o PostgreSQL são reais; somente cenários explícitos de erro
+interceptam respostas. O cookie jar do TestClient é esvaziado a cada envio
+para que somente o cookie do navegador autentique o fluxo. Integrações usam
+exclusivamente mini_soc_test, schemas aleatórios e rollback, reutilizando as
+fixtures anteriores. Nenhum usuário ou registro permanente é criado.
+
+Validação desta entrega: **286 testes aprovados**, incluindo 38 novos
+cenários web e todas as 248 regressões anteriores. Cobertura Python de app:
+**98,56%** (763 instruções, 11 não cobertas), acima da meta de 70%.
+
+A cobertura pytest-cov mede **Python**, não cobertura de instruções JS/CSS
+ou acessibilidade completa. A suíte inclui fluxos reais de login/logout,
+cookies/CSRF, páginas protegidas, filtros, paginação, listas vazias, erros,
+sigilo, XSS, sessão invalidada e atualização de papel. As regressões das
+entregas anteriores continuam obrigatórias.
+
+Roteiro manual para a Pessoa 2, com contas próprias no ambiente local:
+
+1. Abrir /login em desktop e largura móvel (390 px). Usar Tab/Enter, verificar
+   labels, foco visível, link de pular conteúdo, contraste e ausência de corte.
+2. Informar senha incorreta e conta inativa: mensagem genérica e campo limpo.
+   Testar indisponibilidade da API pelo DevTools, sem registrar credenciais.
+3. Entrar como ADMIN. Conferir username/papel e navegar para Users. Combinar
+   filtros, mudar tamanho, avançar/voltar e obter uma consulta sem resultados.
+4. Conferir auditoria com dados reais: autor por ID, ação, entidade, papéis,
+   horário em America/Sao_Paulo e ordem recente; em móvel, rolar só a tabela.
+5. Sair e tentar voltar/recarregar. Invalidar uma sessão pelo fluxo suportado
+   ou aguardar expiração e confirmar retorno ao login, sem dados restritos.
+6. Entrar como ANALYST: sem consultas administrativas; abrir suas URLs
+   diretamente deve retornar 403. APIs também devem negar o acesso.
+7. Pelo DevTools, conferir cookie HttpOnly/SameSite e Secure em HTTPS,
+   storage vazio, POST JSON de login e CSRF no logout. Não copiar tokens
+   para screenshots, relatórios ou Git. Conferir ausência de erros no console.
+
+Revisão manual com leitor de tela e validação de proxy/TLS real continuam
+recomendadas; o transporte ASGI da suíte não testa a implantação HTTPS.
+Esta branch depende de #24 -> #22 -> #19, além da promoção de autenticação
+em #20. Nenhum merge ou alteração de código da Pessoa 2 é realizado.
 
 ## Estado da entrega de persistência — Issue #7
 

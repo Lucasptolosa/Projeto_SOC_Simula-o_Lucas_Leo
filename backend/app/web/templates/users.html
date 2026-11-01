@@ -1,0 +1,13 @@
+{% extends "shell.html" %}
+{% block content %}
+<p class="page-description">Contas cadastradas no ambiente e suas permissões de acesso.</p>
+<section id="query-panel" class="panel" aria-label="Consulta de usuários" aria-busy="true">
+  <form id="user-filters" class="filters">
+    <div><label for="role-filter">Papel</label><select id="role-filter" name="role"><option value="">Todos os papéis</option><option value="ADMIN">ADMIN</option><option value="ANALYST">ANALYST</option></select></div>
+    <div><label for="status-filter">Estado</label><select id="status-filter" name="status"><option value="">Todos os estados</option><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></select></div>
+    <button type="submit" class="primary">Aplicar filtros</button>
+  </form>
+  <div class="table-scroll" role="region" aria-label="Tabela de usuários" tabindex="0"><table><caption class="sr-only">Usuários cadastrados</caption><thead><tr><th scope="col">Nome de usuário</th><th scope="col">Papel</th><th scope="col">Estado</th></tr></thead><tbody id="results"><tr><td colspan="3">Carregando usuários…</td></tr></tbody></table></div>
+  {% include "pagination.html" %}
+</section>
+{% endblock %}

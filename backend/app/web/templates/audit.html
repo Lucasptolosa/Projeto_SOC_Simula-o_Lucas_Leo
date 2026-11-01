@@ -1,0 +1,9 @@
+{% extends "shell.html" %}
+{% block content %}
+<p class="page-description">Histórico preservado, do mais recente ao mais antigo. Horários em America/Sao_Paulo.</p>
+<section id="query-panel" class="panel" aria-label="Consulta de auditoria" aria-busy="true">
+  <div class="panel-heading"><h2>Histórico de operações</h2><span class="muted">Registros persistidos</span></div>
+  <div class="table-scroll" role="region" aria-label="Tabela de auditoria" tabindex="0"><table class="audit-table"><caption class="sr-only">Registros de auditoria em ordem decrescente de data e identificador</caption><thead><tr><th scope="col">Data e hora</th><th scope="col">Autor (ID)</th><th scope="col">Ação</th><th scope="col">Entidade afetada</th><th scope="col">Papel anterior</th><th scope="col">Novo papel</th></tr></thead><tbody id="results"><tr><td colspan="6">Carregando auditoria…</td></tr></tbody></table></div>
+  {% include "pagination.html" %}
+</section>
+{% endblock %}
