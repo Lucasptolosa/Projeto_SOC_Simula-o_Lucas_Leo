@@ -1,13 +1,16 @@
 {% extends "shell.html" %}
 {% block content %}
-<p class="page-description">Contas cadastradas no ambiente e suas permissões de acesso.</p>
+<p class="page-description">Cadastre contas e gerencie username, papel e acesso. As operações são registradas na auditoria.</p>
 <section id="query-panel" class="panel" aria-label="Consulta de usuários" aria-busy="true">
+  <div class="users-toolbar"><div><h2>Contas do ambiente</h2><a href="/app/audit-logs">Consultar histórico de auditoria</a></div><button id="create-user" type="button" class="primary" disabled>Novo usuário</button></div>
+  <p id="operation-result" class="operation-result" role="status" aria-live="polite"></p>
   <form id="user-filters" class="filters">
     <div><label for="role-filter">Papel</label><select id="role-filter" name="role"><option value="">Todos os papéis</option><option value="ADMIN">ADMIN</option><option value="ANALYST">ANALYST</option></select></div>
     <div><label for="status-filter">Estado</label><select id="status-filter" name="status"><option value="">Todos os estados</option><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></select></div>
     <button type="submit" class="primary">Aplicar filtros</button>
   </form>
-  <div class="table-scroll" role="region" aria-label="Tabela de usuários" tabindex="0"><table><caption class="sr-only">Usuários cadastrados</caption><thead><tr><th scope="col">Nome de usuário</th><th scope="col">Papel</th><th scope="col">Estado</th></tr></thead><tbody id="results"><tr><td colspan="3">Carregando usuários…</td></tr></tbody></table></div>
+  <div class="table-scroll" role="region" aria-label="Tabela de usuários" tabindex="0"><table class="users-table"><caption class="sr-only">Usuários cadastrados</caption><thead><tr><th scope="col">Nome de usuário</th><th scope="col">Papel</th><th scope="col">Estado</th><th scope="col">Ações</th></tr></thead><tbody id="results"><tr><td colspan="4">Carregando usuários…</td></tr></tbody></table></div>
   {% include "pagination.html" %}
 </section>
+{% include "user-dialogs.html" %}
 {% endblock %}

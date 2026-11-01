@@ -3,6 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from playwright.sync_api import sync_playwright
 from sqlalchemy import Column, Integer, MetaData, String, Table, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.schema import CreateSchema
@@ -12,6 +13,14 @@ from alembic.config import Config
 from app.core.config import Settings
 from app.db.session import create_db_engine
 from app.db.session import create_session_factory
+
+
+@pytest.fixture(scope="session")
+def chromium():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        yield browser
+        browser.close()
 
 
 @pytest.fixture
