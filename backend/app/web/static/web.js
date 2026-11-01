@@ -12,9 +12,10 @@
   let currentPage = 1;
   let busy = false;
   let hasNext = false;
+  let userManagement = null;
 
   class ApiError extends Error {
-    constructor(status) { super("Falha na requisição"); this.status = status; }
+    constructor(status, detail = null) { super("Falha na requisição"); this.status = status; this.detail = detail; }
   }
 
   async function request(path, options = {}) {
@@ -24,7 +25,10 @@
       const response = await fetch(path, {
         ...options, credentials: "same-origin", cache: "no-store", signal: controller.signal,
       });
-      if (!response.ok) throw new ApiError(response.status);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new ApiError(response.status, error.detail);
+      }
       return response.status === 204 ? null : await response.json();
     } finally {
       clearTimeout(timeout);
@@ -39,6 +43,8 @@
 
   function returnToLogin(reason = "session") {
     csrf = null;
+    userManagement?.close();
+    if (panel) panel.hidden = true;
     if (results) results.replaceChildren();
     window.location.replace(`/login?reason=${reason}`);
   }
@@ -91,15 +97,16 @@
     busy = value;
     if (!panel) return;
     panel.setAttribute("aria-busy", String(value));
-    panel.querySelectorAll("button, select").forEach((element) => { element.disabled = value; });
-    document.querySelector("#previous-page").disabled = value || currentPage <= 1;
-    document.querySelector("#next-page").disabled = value || !hasNext;
+    const locked = value || userManagement?.isSaving();
+    panel.querySelectorAll("button, select").forEach((element) => { element.disabled = locked || element.hasAttribute("data-unavailable"); });
+    document.querySelector("#previous-page").disabled = locked || currentPage <= 1;
+    document.querySelector("#next-page").disabled = locked || !hasNext;
   }
 
   function messageRow(message) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = page === "users" ? 3 : 6;
+    cell.colSpan = page === "users" ? 4 : 6;
     cell.className = "empty-state";
     cell.textContent = message;
     row.append(cell);
@@ -128,6 +135,7 @@
         badge.className = item.status === "ACTIVE" ? "badge active" : "badge inactive";
         badge.textContent = item.status;
         status.append(badge);
+        userManagement?.addActions(row, item);
       } else {
         const date = new Date(item.occurred_at);
         const time = document.createElement("time");
@@ -147,7 +155,7 @@
   }
 
   async function loadRecords() {
-    if (busy || !panel) return;
+    if (busy || userManagement?.isSaving() || !panel) return;
     setBusy(true);
     retry.hidden = true;
     notify("");
@@ -183,8 +191,9 @@
     document.querySelector("#current-username").textContent = user.username;
     document.querySelector("#current-role").textContent = user.role;
     document.querySelectorAll("[data-admin]").forEach((element) => { element.hidden = user.role !== "ADMIN"; });
-    logout.disabled = false;
+    logout.disabled = Boolean(userManagement?.isSaving());
     if (panel && user.role !== "ADMIN") {
+      userManagement?.close();
       panel.hidden = true;
       throw new ApiError(403);
     }
@@ -194,7 +203,23 @@
   async function start() {
     retry.hidden = true;
     try {
-      await identify();
+      const user = await identify();
+      if (page === "users" && !userManagement) {
+        const {initUserManagement} = await import("/static/user-management.js");
+        userManagement = initUserManagement({
+          user,
+          write: (path, payload, method = "POST") => request(path, {
+            method, headers: {"Content-Type": "application/json", "X-CSRF-Token": csrf},
+            body: payload === undefined ? undefined : JSON.stringify(payload),
+          }),
+          refresh: async () => { currentPage = 1; await loadRecords(); },
+          authError: async (error) => {
+            handleError(error);
+            if (error.status === 403) { try { await identify(); } catch (failure) { handleError(failure); } }
+          },
+          savingChanged: (saving) => { logout.disabled = saving; setBusy(busy); },
+        });
+      }
       if (panel) { panel.hidden = false; await loadRecords(); }
     } catch (error) { handleError(error); }
   }
