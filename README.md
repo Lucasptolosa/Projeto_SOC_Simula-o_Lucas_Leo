@@ -134,6 +134,9 @@ somente a API, sem testar a disponibilidade do PostgreSQL.
 
 ## Testes automatizados
 
+Consulte também o contrato e os testes das
+[regras de Investigation e False Positive](docs/regras-investigacoes.md).
+
 Dentro da pasta `backend`, execute:
 
 ```powershell
