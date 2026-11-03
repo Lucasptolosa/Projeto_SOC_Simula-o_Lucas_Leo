@@ -83,7 +83,7 @@ def test_modelo_valida_entrada(field, value, encoded_password):
         User(**values)
 
     # Assert
-    assert set(Base.metadata.tables) == {"users"}
+    assert "users" in Base.metadata.tables
 
 
 @pytest.mark.parametrize("field,value", [
@@ -196,5 +196,5 @@ def test_migration_compativel_com_metadata(users_db):
 
     # Assert
     assert differences == []
-    assert set(tables) == {"users", "alembic_version"}
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0001_create_users"
+    assert set(tables) == {"users", "auth_sessions", "alembic_version"}
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0002_create_auth_sessions"
