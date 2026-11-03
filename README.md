@@ -153,6 +153,9 @@ Metas de cobertura:
 - Cobertura geral: pelo menos 70%.
 - Detection Rules e transições de Incident: pelo menos 80%.
 
+O contrato e a integração futura estão em
+[Regras de transição de Incidents](docs/regras-transicao-incidentes.md).
+
 Os testes de integração utilizam o banco `mini_soc_test`.
 Eles exigem PostgreSQL disponível e o arquivo `backend/.env.test` configurado.
 Os testes transacionais usam tabelas `TEMPORARY` no schema `pg_temp`, exclusivas
