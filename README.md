@@ -1,30 +1,86 @@
 # Mini SOC
 
-## Assets - Issue #38 em implementação
+## Assets - Issue #38
 
-Nesta branch existem o modelo `app/assets/models.py`, os contratos de entrada
-e saída em `app/assets/schemas.py` e 42 testes puros em `test_asset_contracts.py`.
-Os detalhes alinhados estão na seção 3.2 de `spec.md`: UUID gerado pelo servidor,
-nome sem unicidade, cadastro com nome/tipo/estado, alteração somente de nome/tipo
-inclusive em inativos e desativação repetida sem mutação nem nova auditoria.
+O módulo `app/assets` implementa cadastro, alteração de nome/tipo e desativação
+de Assets. Reutiliza a Base, Settings, Engine, Session Factory, autenticação,
+RBAC e auditoria já integrados à main pelo PR #36. Não há infraestrutura paralela.
 
-Validação parcial no Python 3.14.10: 42 testes de Assets e 46 regressões do motor
-aprovados; cobertura de linhas dos modelos/schemas de Assets em 100%.
-Não foram executados testes de banco. Nenhum requisito de persistência ou fluxo
-completo é declarado atendido por esses testes de contrato.
+| Endpoint | Papel | Comportamento |
+|---|---|---|
+| `POST /assets` | ADMIN | Recebe name/type/status, gera UUID e retorna HTTP 201. |
+| `PATCH /assets/{id}` | ADMIN | Altera somente name/type, inclusive em inativos; HTTP 200. |
+| `POST /assets/{id}/deactivate` | ADMIN | Altera para INACTIVE; repetição retorna estado atual sem novo Audit Log. |
 
-Ainda faltam migration, registro no Alembic, serviços transacionais, API e testes
-de integração. A auditoria compartilhada existe fora da main na integração
-administrativa da Pessoa 1. Sua base de integração precisa ser definida antes
-de concluir RF15.1; não foi criada infraestrutura de auditoria duplicada.
-O estado intermediário desta branch não está pronto para merge ou para aplicar
-migrations: o modelo Asset ainda não possui revisão Alembic correspondente.
+As respostas contêm somente id/name/type/status e usam Cache-Control: no-store.
+Nome é obrigatório e não pode conter somente whitespace, sem normalização,
+unicidade ou limite de tamanho adicional. Tipos/estados seguem exatamente a spec.
+Campos extras, nulls explícitos, PATCH vazio e alterações de id/status são rejeitados.
+Não há reativação, exclusão física, interface web ou consulta/listagem nesta entrega.
 
-Para repetir somente a validação parcial, dentro de `backend`:
+Serviços não fazem commit. O endpoint valida a resposta e confirma uma única
+transação após a gravação de Asset e Audit Log; qualquer falha provoca rollback.
+`append_audit` é reutilizado com entity_type ASSET e ações ASSET_CREATED,
+ASSET_UPDATED ou ASSET_DEACTIVATED, com old_role/new_role nulos.
+Operações que não mudam dados não geram auditoria de mutação inexistente.
+
+As escritas reutilizam o lock transacional administrativo existente para conferir
+o autor atual em coordenação com mudanças de papel/estado. Atualização e
+desativação também bloqueiam a linha do Asset, evitando alterações concorrentes
+baseadas em estado desatualizado. Origin e CSRF existentes são obrigatórios.
+
+Migration `0004_create_assets`, após `0003_create_audit_logs`: cria somente assets,
+com UUID, nome, tipo, estado e constraints nomeadas. Não altera Users, AuthSession
+ou AuditLog. O modelo é registrado no metadata compartilhado do Alembic.
+Não foi aplicada migration em mini_soc_dev. Downgrade destrutivo é bloqueado,
+seguindo a política existente de preservação dos dados.
+
+### Rastreabilidade e validação de Assets
+
+| Requisito | Entrega e limite |
+|---|---|
+| RF04 | Cadastro persistente e UUID gerado no servidor. |
+| RF29 | Alteração de nome/tipo preserva id/status e histórico de auditoria. |
+| RF05 | Desativação sem exclusão; repetição idempotente sem nova auditoria. |
+| RF03/RNF02 | API protegida por ADMIN e autor ativo conferido no serviço. |
+| RF15.1 | Auditoria compartilhada, atômica com a mutação do Asset. |
+| RN05 | Não há exclusão física/cascata de Assets; integração com evidências de Logs/Alerts permanece futura. |
+| RNF03 | Integridade/leitura entre sessões testadas em PostgreSQL; reinício real e recuperação integral do MVP não comprovados. |
+
+Os contratos estão na seção 3.2 da spec. Testes de contrato e integração seguem
+AAA, com positivos, negativos, permissões, estado inativo, repetições e rollback
+provocado por falhas reais de constraints e falha da auditoria após flush.
+O teste de metadata existente foi atualizado apenas para a nova tabela/head.
+
+Validação da entrega no Python 3.14.10: 460 testes aprovados em 140,38 s,
+99,14% de cobertura geral e 100% de cobertura de linhas em Assets. A suíte inclui
+103 casos de Assets (42 de contrato e 61 de integração), regressões existentes
+e testes web com Chromium real. O primeiro passe específico de Assets, antes
+dos dois últimos casos de constraints, também mediu 100% de linhas/ramificações.
+As dependências declaradas foram conferidas com uv pip check, sem incompatibilidades.
+Resultado de CI remoto ainda não confirmado; estes são resultados locais.
+
+Os testes foram executados sobre snapshot exato da main 1f29969 mais a entrega
+da #38, em cluster PostgreSQL 17.11 portátil separado, vinculado somente ao
+loopback e usando mini_soc_test com role NOSUPERUSER/NOCREATEDB/NOCREATEROLE.
+O conteúdo Python final do clone foi conferido contra o snapshot testado.
+Nenhuma instalação, credencial ou banco de desenvolvimento foi utilizado.
+
+Dentro de backend, com `.env.test` apontando exclusivamente para mini_soc_test:
 
 ```powershell
-python -m pytest --noconftest tests/test_asset_contracts.py tests/test_detection_engine.py tests/test_detection_validation.py -q
+python -m pytest tests/test_asset_contracts.py tests/test_assets.py --cov=app.assets --cov-branch --cov-report=term-missing -q
+python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70 -q
 ```
+
+As fixtures existentes verificam o nome configurado e o banco real antes de
+qualquer escrita; usam schemas aleatórios, transação externa, savepoints e
+rollback. Não compartilhar credenciais ou usar mini_soc_dev nos testes.
+
+Permanecem fora desta entrega: importação de Logs, ingestão em Asset inativo,
+persistência/consulta de Alerts, Dashboard e teste de desempenho do MVP.
+Logs/Alerts ainda não têm modelos persistentes: não se afirma que a preservação
+de suas associações com Asset já tenha sido testada.
 
 Sistema acadêmico de monitoramento de segurança, desenvolvido para receber logs simulados, aplicar regras de detecção, gerar alertas e permitir a investigação e o tratamento de incidentes.
 
@@ -477,12 +533,13 @@ simular mudança de papel e inatividade diretamente no banco.
 
 RF03 e RNF02 estão atendidos pela infraestrutura reutilizável e pelos
 cenários isolados, mas não são declarados integralmente concluídos no MVP.
-Os endpoints de Assets, Logs, Detection Rules, Alerts, Investigations,
-Incidents, Dashboard e Audit Logs ainda precisam integrar as dependências
+Os endpoints futuros de Logs, Detection Rules, Alerts, Investigations,
+Incidents e Dashboard ainda precisam integrar as dependências
 apropriadas quando forem implementados. Login, consulta do próprio perfil
 e logout continuam com as proteções de autenticação/CSRF existentes, sem
 restrição administrativa adicional. O health check permanece público.
-As rotas administrativas de Users da Issue #21 já usam ADMIN explicitamente.
+As rotas administrativas de Users da Issue #21 e de Assets da Issue #38 já usam
+ADMIN explicitamente. A consulta de Audit Logs também usa ADMIN no servidor.
 
 Essa entrega de infraestrutura RBAC não criou endpoints de negócio, alteração de papéis, auditoria,
 JWT, tabelas ou migrations e não altera o código da Pessoa 2. O app de
@@ -598,7 +655,7 @@ em dados compartilhados: isso exigiria confirmar dados fora dos schemas
 transacionais reversíveis usados pela suíte. Não há limpeza destrutiva.
 
 RF19.1, RF19.2, RF25, RF26, RF30 e RF31 são implementados para estes fluxos.
-RF15.1 cobre Users; Assets e regras continuam pendentes. RNF01 e RNF02/RF03
+RF15.1 cobre Users e, na Issue #38, Assets; regras continuam pendentes. RNF01 e RNF02/RF03
 são aplicados nestas rotas, sem declarar a matriz completa do MVP atendida.
 Reset de senha, reativação, UI e auditoria dos outros módulos permanecem
 fora desta entrega. Listagem de Users e RF28 são adicionados na Issue #23.

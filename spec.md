@@ -85,6 +85,21 @@ Detalhamento dos RF04, RF05 e RF29 alinhado na Issue #38:
 Esses contratos não definem política de importação para Asset inativo nem
 significam que Logs/Alerts já estejam persistidos ou integrados.
 
+As operações HTTP da entrega #38 são exclusivas de Administrator autenticado,
+reutilizando as verificações existentes de Origin e CSRF nas escritas:
+
+| Operação | Entrada | Resposta de sucesso |
+|---|---|---|
+| `POST /assets` | JSON com `name`, `type`, `status`. | HTTP 201 e `id`, `name`, `type`, `status`. |
+| `PATCH /assets/{id}` | JSON com `name` e/ou `type`. | HTTP 200 com os mesmos campos públicos. |
+| `POST /assets/{id}/deactivate` | Identificador na rota. | HTTP 200 com o estado atual, inclusive na repetição sem mutação. |
+
+Asset inexistente retorna HTTP 404 após autenticação/autorização. Entrada ou
+UUID inválido retorna HTTP 422. Autenticação inválida e papel não permitido
+preservam respectivamente HTTP 401 e HTTP 403 da infraestrutura compartilhada.
+Alteração que informa somente valores já existentes é uma repetição sem mutação:
+retorna o Asset atual, preservando a auditoria existente sem novo registro.
+
 ## 4. Requisitos funcionais (RF)
 
 **RF01:** WHEN um User ativo informar nome de usuário e senha correspondentes aos valores cadastrados, THE SYSTEM SHALL autenticá-lo;   
