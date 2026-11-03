@@ -6,6 +6,20 @@ Projeto de Modelagem de Sistemas desenvolvido por Lucas e Leonardo.
 O escopo é definido em [spec.md](spec.md) e a arquitetura no
 [ADR-001](docs/adr/01-arquitetura-inicial.md).
 
+## Estado da integração
+
+A main verificada em 4a956bc contém persistência de Users, autenticação e
+RBAC. Esta branch integracao/administracao-web prepara a promoção das
+funcionalidades administrativas e web das Issues #21, #23, #25 e #27,
+ainda ausentes da main. Um PR merged em branch intermediária não conclui
+essa integração. A Issue #18 foi regularizada após validação na main.
+
+O [diagnóstico de integração](docs/estado-integracao.md) lista todas as
+Issues/PRs verificados, os commits reaplicados, a reconciliação dos PRs #32
+e #34, os resultados dos testes e a ordem de revisão. A sequência proposta
+é CI #30, administração/web, Incidents #32 e Investigations #34; os dois
+últimos são independentes. Nenhum merge na main foi executado nesta tarefa.
+
 ## Tecnologias
 
 - Python 3.14 (ambiente validado com Python 3.14.8)
