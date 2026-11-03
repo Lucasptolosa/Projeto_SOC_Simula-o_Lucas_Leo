@@ -26,6 +26,13 @@ com Chromium, **357 testes/98,83%**. Integrações somente em mini_soc_test,
 com guardas de nome real, schemas isolados e rollback. Nenhuma migration
 foi alterada. actionlint e pip check passaram.
 
+A composição completa após #37 passou em **573 testes/98,90%**, com
+Chromium real e cobertura de **100%** nos módulos de Incidents e
+Investigations. Os **46 testes** do Detection Engine também passaram
+separadamente com cobertura combinada de linhas/ramificações de **97,27%**,
+exigindo mínimo de 80%. Alembic confirmou uma única head, 0003 -> 0002 -> 0001.
+O snapshot temporário não atualiza branches nem incorpora domínios ao #36.
+
 Execuções reais após a atualização:
 
 - [#30: 174 testes/98,29%](https://github.com/Lucasptolosa/Projeto_SOC_Simula-o_Lucas_Leo/actions/runs/41733219439).
