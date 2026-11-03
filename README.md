@@ -468,3 +468,63 @@ autenticação para main e a reconciliação posterior da pilha seguem pendentes
 Essa infraestrutura segue o monólito modular definido no ADR-001. Os testes
 com tabelas temporárias verificam transações entre sessões na mesma conexão;
 não demonstram durabilidade das entidades após reconexão ou reinício.
+# Validação das Detection Rules - Issue #35
+
+Esta entrega complementa o motor existente, sem alterar os parâmetros da
+DR01, DR02 ou DR03 definidos na seção 8 de `spec.md`.
+
+`Log` exige `occurred_at` com offset explícito, seja datetime ou texto ISO 8601.
+Entradas sem fuso geram ValueError; nenhum fuso é inferido. O instante fornecido
+é preservado e a DR03 o converte para America/Sao_Paulo ao avaliar expediente.
+Essa correção atende ao contrato já aprovado da seção 3.1, sem nova regra funcional.
+
+`DetectionEngine.register_rule(rule, evaluator)` registra uma extensão interna
+de desenvolvimento: o avaliador recebe Log e retorna Alert ou None. A regra
+deve ter metadados válidos e o avaliador deve produzir Alerts coerentes com ela.
+Não substitui regras existentes e não permite cadastrar regras pela aplicação.
+Os avaliadores devem ser registrados antes dos lotes. A proposta de arquitetura
+e seus limites estão em `docs/adr/02-extensao-detection-rules.md`, ainda sob revisão.
+
+O histórico das regras iniciais é atualizado independentemente da ativação,
+preservando o comportamento anterior. Somente avaliadores ativos são chamados;
+AUTH_SUCCESS encerra o histórico DR02 mesmo quando a regra está inativa.
+
+Rastreabilidade:
+
+| Referência | Evidência e limite |
+|---|---|
+| RF07 / seção 8 | Testes dos limites de 120/300 s, isolamento, UTC e expediente. |
+| RF08 / RF09 | Alerts em memória com origem, evidências, NEW e Severity das regras. Persistência pendente. |
+| RF23 | Avaliadores inativos não executam; três regras iniciais cobertas. |
+| RF18 / RF24 | Troca em memória e preservação dos Alerts anteriores; API, autorização, auditoria e persistência pendentes. |
+| Seção 8.1 | Deduplicação de sequências DR01, consumo DR02 e histórico na reativação. |
+| Seção 8.2 | Ordenação/desempate e rejeição de eventos antigos ou iguais em lote posterior. |
+| RNF08 | Registro de avaliador adicional preservando resultados de DR01-DR03. ADR-002 proposto. |
+| CQ01 | Gate específico de pelo menos 80% para o motor. |
+| RF06 / seção 3.1 | Validação de fuso no objeto Log; importação completa e Assets persistidos pendentes. |
+
+Dentro de `backend`, com as dependências de desenvolvimento instaladas:
+
+```powershell
+python -m pytest --noconftest tests/test_detection_engine.py tests/test_detection_validation.py --cov=app.detection_engine --cov-branch --cov-report=term-missing --cov-fail-under=80 -q
+```
+
+`--noconftest` restringe esta execução aos testes puros, sem carregar fixtures
+de banco. Nenhum dos dois arquivos usa PostgreSQL ou arquivos de ambiente.
+A execução acima não substitui a suíte completa ou sua meta geral de cobertura.
+
+Verificação local desta entrega no Python 3.14.10: 46 testes aprovados
+(9 anteriores e 37 novos), 97,27% de cobertura combinada de linhas/ramificações
+do motor, com pytest 9.1.1 e pytest-cov 7.1.0 em ambiente isolado de ferramentas.
+Também passaram 30 regressões sem banco (health, senhas, proteção do bootstrap,
+configuração e validação de papéis). As dependências declaradas foram instaladas
+sem alteração dos requirements; o ambiente de ferramentas inclui tzdata.
+A execução anterior em Python 3.12.14 passou os mesmos 46 testes, com 97,51%.
+A diferença de cobertura decorre da medição no interpretador utilizado.
+A CI, a suíte completa com PostgreSQL e a revisão da Pessoa 1 permanecem pendentes.
+Este clone não possui .env.test; não foi utilizado banco de desenvolvimento.
+
+Persistem como pendentes: RF21 (rejeição parcial da importação), RF22 (unicidade
+persistente de event_id), RNF03 (recuperação após reinício), RF15.1 (auditoria),
+integração com Assets/Logs/Alerts e desempenho RNF05/RNF06. O estado e os IDs
+locais do motor não devem ser considerados contratos persistentes do sistema.
