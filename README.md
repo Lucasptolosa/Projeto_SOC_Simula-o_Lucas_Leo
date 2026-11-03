@@ -8,8 +8,9 @@ O escopo é definido em [spec.md](spec.md) e a arquitetura no
 
 ## Estado da integração
 
-A main verificada em 4a956bc contém persistência de Users, autenticação e
-RBAC. Esta branch integracao/administracao-web prepara a promoção das
+A main verificada em fc97bb2 contém persistência de Users, autenticação,
+RBAC e as Detection Rules atualizadas pelo PR #37; a Issue #35 foi encerrada.
+Esta branch integracao/administracao-web prepara a promoção das
 funcionalidades administrativas e web das Issues #21, #23, #25 e #27,
 ainda ausentes da main. Um PR merged em branch intermediária não conclui
 essa integração. A Issue #18 foi regularizada após validação na main.

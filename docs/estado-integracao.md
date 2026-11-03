@@ -1,5 +1,55 @@
 # Estado de integração do Mini SOC — 2026-11-03
 
+## Preparação após o PR #37
+
+A referência atual é `origin/main` em `fc97bb2`, que contém o merge do
+PR #37 e o commit `0b4207f` da Pessoa 2. A Issue #35 está encerrada. Foram
+integrados testes de limites temporais, isolamento, regras inativas,
+desempate, rejeição de datas sem fuso e registro interno de avaliadores.
+ADR-002 continua marcado como proposto no arquivo original; não foi alterado.
+
+| PR | Base mantida | Commit adicional | Situação |
+|---|---|---|---|
+| #30 | main | b36f721 | CI reconciliada com a main atual, sem alteração do workflow. |
+| #36 | main | f6450c3 | Administração/web reconciliadas com o PR #37, sem patch de CI duplicado. |
+| #32 | ci/testes-automatizados | ebe788d | Base de CI atualizada; núcleo e testes de Incidents preservados. |
+| #34 | ci/testes-automatizados | f1c4f7a | Base de CI atualizada; núcleo e testes de Investigations preservados. |
+
+As atualizações usam merges normais para as branches de trabalho, sem
+reescrever história. Não houve conflitos textuais. Blobs do motor e dos
+dois arquivos de testes de Detection Rules são idênticos aos da main atual.
+Os domínios de #32 e #34 também foram comparados aos seus commits anteriores.
+A composição dos quatro PRs ficou sem conflitos, sem atualizar referências.
+
+Validação local atual: main com CI, **174 testes/98,29%**; administração/web
+com Chromium, **357 testes/98,83%**. Integrações somente em mini_soc_test,
+com guardas de nome real, schemas isolados e rollback. Nenhuma migration
+foi alterada. actionlint e pip check passaram.
+
+Execuções reais após a atualização:
+
+- [#30: 174 testes/98,29%](https://github.com/Lucasptolosa/Projeto_SOC_Simula-o_Lucas_Leo/actions/runs/41733219439).
+- [#32: 278 testes/98,37%, domínio 100%](https://github.com/Lucasptolosa/Projeto_SOC_Simula-o_Lucas_Leo/actions/runs/41733225364).
+- [#34: 286 testes/98,37%, domínio 100%](https://github.com/Lucasptolosa/Projeto_SOC_Simula-o_Lucas_Leo/actions/runs/41733234059).
+
+O resultado atual da composição completa e a execução Linux/Chromium do
+#36 são registrados na descrição desse PR. A validação do #36 pode usar
+temporariamente a base de CI em draft, sem copiar o workflow para sua branch;
+seu destino final continua sendo main. Reconfirmar os checks após integrar #30.
+
+Ordem operacional: **#30 -> #36 -> #32 -> #34**. Depois do merge autorizado
+de #30, retargetar #32 e #34 para main e validar novamente. Eles dependem
+somente de #30 e são independentes entre si. Encerrar #29 após #30;
+#21/#23/#25/#27 após #36; #31 após #32; #33 após #34. A #12 continua com a
+Pessoa 2. Nenhum merge na main, force push, exclusão de branch ou comentário
+no GitHub foi realizado nesta preparação.
+
+## Diagnóstico histórico anterior ao PR #37
+
+O restante deste documento preserva o levantamento anterior. As referências
+a main 4a956bc, Issue #35 aberta, 137/320/536 testes e execuções antigas são
+históricas; o estado atual é o da seção acima e das descrições dos PRs.
+
 Diagnóstico por arquivos, blobs e ancestralidade, além do estado dos PRs.
 Referência da main: `4a956bc`. Não foi realizado merge na main, force push,
 exclusão de branches ou reescrita de histórico durante esta organização.
