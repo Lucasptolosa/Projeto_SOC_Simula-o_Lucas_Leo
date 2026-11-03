@@ -1,0 +1,24 @@
+<dialog id="user-dialog" class="user-dialog" aria-labelledby="user-dialog-title" aria-describedby="user-dialog-help">
+  <form id="user-form" method="post" action="/users" autocomplete="off">
+    <div class="dialog-heading"><p class="eyebrow">ADMINISTRAÇÃO</p><h2 id="user-dialog-title">Novo usuário</h2><p id="user-dialog-help" class="muted">A nova conta será criada com estado ACTIVE.</p></div>
+    <p id="user-error" class="feedback error" role="alert"></p>
+    <fieldset id="user-fields">
+      <label for="user-username">Username</label><input id="user-username" name="username" required autocapitalize="none" spellcheck="false" autocomplete="off">
+      <label for="user-role">Papel da conta</label><select id="user-role" name="role" required><option value="ANALYST">ANALYST</option><option value="ADMIN">ADMIN</option></select>
+      <div id="password-fields">
+        <label for="user-password">Senha do novo usuário</label><input id="user-password" name="password" type="password" autocomplete="new-password" required>
+        <label for="user-password-confirmation">Confirmar senha</label><input id="user-password-confirmation" name="confirmation" type="password" autocomplete="new-password" required>
+      </div>
+    </fieldset>
+    <div class="dialog-footer"><button type="button" class="quiet dialog-cancel">Cancelar</button><button id="save-user" type="submit" class="primary">Criar usuário</button></div>
+  </form>
+</dialog>
+<dialog id="deactivate-dialog" class="user-dialog" aria-labelledby="deactivate-title" aria-describedby="deactivate-warning">
+  <form id="deactivate-form" method="post" action="/users">
+    <div class="dialog-heading"><p class="eyebrow">CONTROLE DE ACESSO</p><h2 id="deactivate-title">Desativar usuário?</h2></div>
+    <p class="deactivate-target">Conta: <strong id="deactivate-username"></strong></p>
+    <p id="deactivate-warning">A conta perderá acesso ao Mini SOC e todas as suas sessões serão revogadas. Os registros históricos serão preservados.</p>
+    <p id="deactivate-error" class="feedback error" role="alert"></p>
+    <div class="dialog-footer"><button type="button" class="quiet dialog-cancel" autofocus>Cancelar</button><button id="confirm-deactivate" type="submit" class="danger">Confirmar desativação</button></div>
+  </form>
+</dialog>

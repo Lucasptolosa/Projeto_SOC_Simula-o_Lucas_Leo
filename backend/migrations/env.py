@@ -8,6 +8,8 @@ from app.db.session import create_db_engine
 from app.db.base import Base
 from app.users.models import User
 from app.auth.models import AuthSession
+from app.audit.models import AuditLog
+from app.assets.models import Asset
 
 
 config = context.config
