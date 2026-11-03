@@ -35,7 +35,7 @@ def csrf_token(token: str) -> str:
 
 
 def authenticate(db: Session, username: str, password: str) -> User:
-    user = db.scalar(select(User).where(User.username == username))
+    user = db.scalar(select(User).where(User.username == username).with_for_update())
     # Reduz enumeração temporal
     encoded = user.password_hash if user is not None else _DUMMY_HASH
     valid = verify_password(password, encoded)
@@ -51,6 +51,12 @@ def revoke_session(db: Session, token: str | None, now: datetime) -> None:
             AuthSession.token_hash == digest,
             AuthSession.revoked_at.is_(None),
         ).values(revoked_at=now))
+
+
+def revoke_user_sessions(db: Session, user_id, now: datetime) -> None:
+    db.execute(update(AuthSession).where(
+        AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None),
+    ).values(revoked_at=now))
 
 
 def issue_session(db: Session, user: User, seconds: int, previous: str | None) -> str:

@@ -32,6 +32,21 @@ Projeto de Modelagem de Sistemas desenvolvido por Lucas e Leonardo.
 O escopo é definido em [spec.md](spec.md) e a arquitetura no
 [ADR-001](docs/adr/01-arquitetura-inicial.md).
 
+## Estado da integração
+
+A main verificada em fc97bb2 contém persistência de Users, autenticação,
+RBAC e as Detection Rules atualizadas pelo PR #37; a Issue #35 foi encerrada.
+Esta branch integracao/administracao-web prepara a promoção das
+funcionalidades administrativas e web das Issues #21, #23, #25 e #27,
+ainda ausentes da main. Um PR merged em branch intermediária não conclui
+essa integração. A Issue #18 foi regularizada após validação na main.
+
+O [diagnóstico de integração](docs/estado-integracao.md) lista todas as
+Issues/PRs verificados, os commits reaplicados, a reconciliação dos PRs #32
+e #34, os resultados dos testes e a ordem de revisão. A sequência proposta
+é CI #30, administração/web, Incidents #32 e Investigations #34; os dois
+últimos são independentes. Nenhum merge na main foi executado nesta tarefa.
+
 ## Tecnologias
 
 - Python 3.14 (ambiente validado com Python 3.14.8)
@@ -41,6 +56,7 @@ O escopo é definido em [spec.md](spec.md) e a arquitetura no
 - Psycopg
 - Alembic
 - pytest
+- Jinja2, HTML, CSS e JavaScript
 
 ## Pré-requisitos
 
@@ -385,12 +401,12 @@ ocultos. Testes cobrem também a ausência de segredos nessas mensagens.
 - RNF01: verificação Argon2id, preservando o armazenamento da entrega Users.
 - RNF02/RF03: autenticação no servidor e infraestrutura RBAC disponíveis;
   falta aplicar a matriz a todos os endpoints de negócio.
-- RF19.2: usuário inativo é bloqueado a cada acesso; endpoint de desativação
-  e revogação definitiva de todas as sessões nessa operação ainda pendem.
+- RF19.2: usuário inativo é bloqueado a cada acesso; o gerenciamento
+  administrativo abaixo desativa a conta e revoga suas sessões definitivamente.
 - RNF09: tratamento técnico de falhas e sigilo; fluxos futuros de importação
   deverão reutilizar o tratamento e verificar seus próprios cenários.
 
-Não há cadastro público, gerenciamento administrativo, UI de login,
+Não há cadastro público, UI de login,
 limitação distribuída de tentativas ou renovação automática de sessão.
 As integrações usam exclusivamente `mini_soc_test`, com schemas isolados e
 rollback, incluindo comparação entre migration e metadata. Não comprovam
@@ -461,13 +477,14 @@ simular mudança de papel e inatividade diretamente no banco.
 
 RF03 e RNF02 estão atendidos pela infraestrutura reutilizável e pelos
 cenários isolados, mas não são declarados integralmente concluídos no MVP.
-Os endpoints de Users, Assets, Logs, Detection Rules, Alerts, Investigations,
+Os endpoints de Assets, Logs, Detection Rules, Alerts, Investigations,
 Incidents, Dashboard e Audit Logs ainda precisam integrar as dependências
 apropriadas quando forem implementados. Login, consulta do próprio perfil
 e logout continuam com as proteções de autenticação/CSRF existentes, sem
 restrição administrativa adicional. O health check permanece público.
+As rotas administrativas de Users da Issue #21 já usam ADMIN explicitamente.
 
-Esta entrega não cria endpoints de negócio, alteração de papéis, auditoria,
+Essa entrega de infraestrutura RBAC não criou endpoints de negócio, alteração de papéis, auditoria,
 JWT, tabelas ou migrations e não altera o código da Pessoa 2. O app de
 produção não registra automaticamente as permissões da tabela acima: cada
 rota futura precisa declarar sua dependência explicitamente.
@@ -477,6 +494,485 @@ integrado somente em `codex/persistencia-users`; a main ainda não possuía
 autenticação. Por isso, `feat/autorizacao-papeis` usa `codex/autenticacao`
 como base do PR, preservando o diff somente de RBAC. A promoção da
 autenticação para main e a reconciliação posterior da pilha seguem pendentes.
+
+## Gerenciamento administrativo de Users — Issue #21
+
+Todas as rotas abaixo exigem sessão válida, User ACTIVE, papel ADMIN,
+Origin configurado e X-CSRF-Token da sessão. Não existe cadastro público.
+As respostas contêm somente id, username, role e status, com no-store.
+
+| Endpoint | Entrada e resultado |
+|---|---|
+| `POST /users` | JSON username, role (ADMIN/ANALYST) e password; cria UUID e ACTIVE; retorna 201. |
+| `PATCH /users/{user_id}` | JSON com username e/ou role de outro User; preserva UUID e associações; retorna 200. |
+| `POST /users/{user_id}/deactivate` | Desativa sem excluir, revoga todas as sessões e retorna 200. |
+
+Campos desconhecidos, valores nulos em alteração, papel inválido e valores
+vazios são rejeitados com 422 genérico, sem eco do corpo. Username duplicado
+retorna 409, inclusive pela constraint do banco. User inexistente retorna
+404. Um PATCH deve informar ao menos um campo; repetir valores já atuais
+retorna 200 sem gerar auditoria adicional. Desativação de conta já INACTIVE
+retorna 409 sem novo registro. Não há alteração de senha ou reativação.
+
+RF30 cobre outra conta: alteração do próprio username ou papel é recusada
+com 403. RF25 impede a alteração do próprio papel mesmo quando há outros
+administradores. A autodesativação é permitida somente quando resta outro
+ADMIN ACTIVE. O último ADMIN ACTIVE não pode ser desativado (409); sua
+mudança de papel também é bloqueada pela regra de edição da própria conta.
+
+### Transações e concorrência
+
+As operações usam o mesmo Session/Engine da aplicação. O Engine explicita
+READ COMMITTED: depois de esperar um lock, uma nova consulta vê o estado
+confirmado atual. O serviço obtém pg_advisory_xact_lock com chave fixa de
+escrita de Users, reconsulta o autor e depois bloqueia a linha do alvo com
+FOR UPDATE. A contagem de administradores ocorre dentro dessa seção
+serializada. Assim, duas requisições não aprovam a remoção de administradores
+com base na mesma contagem antiga. O lock termina no commit/rollback.
+
+Todos os futuros caminhos que alterem papel/estado de User devem reutilizar
+esse protocolo de serialização. Ele protege as operações do servidor, não
+escritas arbitrárias realizadas diretamente por um administrador do banco.
+O lock_timeout da transação é de cinco segundos; uma falha de lock não
+confirma alterações parciais. Não há repetição automática de operações.
+
+O login bloqueia a linha do User antes de verificar credenciais e mantém
+o lock até terminar a transação. A desativação usa o mesmo lock de linha:
+ou um login anterior confirma sua sessão e ela é revogada pela desativação,
+ou a desativação confirma primeiro e o login encontra INACTIVE. Nenhuma
+sessão é emitida usando uma leitura antiga após a revogação dessa conta.
+
+Alteração de estado, revogação e auditoria usam uma única transação. Falha
+em qualquer etapa reverte tudo. Sessões revogadas continuam inválidas mesmo
+se o estado for restaurado por um procedimento externo; isso é testado
+sem adicionar endpoint de reativação. Alteração de papel vale na próxima
+requisição autenticada, sem copiar papéis para cookies ou sessões.
+
+### Contrato compartilhado de auditoria
+
+Audit Log não existia nas branches remotas verificadas. O módulo
+`app/audit` adiciona a estrutura mínima compartilhada e a função interna
+`append_audit`, que apenas acrescenta um registro na Session recebida, sem
+commit próprio. Quem executa a operação deve confirmar ou reverter a
+alteração de negócio e a auditoria juntas.
+
+| Campo | Contrato |
+|---|---|
+| id | UUID do registro, gerado na aplicação. |
+| author_id | UUID do User autor; FK RESTRICT preserva a associação histórica. |
+| action | Ação definida pelo serviço, nunca copiada de entrada livre do cliente. |
+| entity_type | Tipo de entidade; nesta entrega USER. |
+| entity_id | Identificador textual, permitindo UUIDs de User e identificadores futuros de outros módulos. |
+| occurred_at | Data/hora UTC com fuso. |
+| old_role / new_role | Ambos nulos ou ambos preenchidos com ADMIN/ANALYST; somente quando há mudança de papel. |
+
+As ações desta entrega são USER_CREATED, USER_UPDATED e USER_DEACTIVATED.
+Cada operação efetiva gera exatamente um registro. Alterar username e
+papel juntos gera um único USER_UPDATED com os dois papéis, conforme RF26.
+Não existe campo livre de payload ou senha, token ou hash no registro.
+
+Assets, Detection Rules, Alerts e Incidents poderão usar append_audit com
+suas ações e identificadores no futuro, preservando a transação do serviço.
+Somente operações de Users são auditadas agora. Não existem endpoints de
+alteração/exclusão de Audit Logs; a consulta RF28 está descrita na Issue #23 abaixo.
+RNF04 é atendido pelas interfaces disponibilizadas; não há trigger ou
+privilégio SQL prometendo imutabilidade contra acesso direto ao PostgreSQL.
+
+### Migration, validação e requisitos
+
+`0003_create_audit_logs` depende de `0002_create_auth_sessions` e cria apenas
+audit_logs com suas constraints. Nenhuma tabela de Users/sessões é recriada.
+O metadata compartilha Base; o downgrade destrutivo é bloqueado. Revise a
+migration antes de aplicá-la. Nesta entrega ela é executada somente nos
+schemas isolados dos testes em mini_soc_test, com rollback, sem aplicação
+em desenvolvimento. A comparação automática de metadata deve permanecer
+sem diferenças e o Alembic com uma única head.
+
+Os testes incluem RBAC e CSRF nas três rotas, Argon2id, duplicação, edição,
+último ADMIN, revogação, auditoria única e rollback de falhas após flush.
+O teste de concorrência usa duas transações físicas de PostgreSQL: uma
+espera pelo lock da outra e só prossegue após sua liberação. A preservação
+do último ADMIN é verificada com operações subsequentes sobre o mesmo
+estado. Não é declarado um teste end-to-end de duas mutações HTTP paralelas
+em dados compartilhados: isso exigiria confirmar dados fora dos schemas
+transacionais reversíveis usados pela suíte. Não há limpeza destrutiva.
+
+RF19.1, RF19.2, RF25, RF26, RF30 e RF31 são implementados para estes fluxos.
+RF15.1 cobre Users; Assets e regras continuam pendentes. RNF01 e RNF02/RF03
+são aplicados nestas rotas, sem declarar a matriz completa do MVP atendida.
+Reset de senha, reativação, UI e auditoria dos outros módulos permanecem
+fora desta entrega. Listagem de Users e RF28 são adicionados na Issue #23.
+spec.md e ADR são preservados.
+
+Integração: PR #20 propõe codex/autenticacao -> main usando o commit
+existente de autenticação, sem duplicação. O gerenciamento de Users usa
+feat/autorizacao-papeis como base enquanto o PR #19 estiver aberto. Nenhum
+merge é executado automaticamente por esta entrega.
+
+## Consultas administrativas — Issue #23
+
+As duas consultas exigem sessão válida, User ACTIVE e papel ADMIN,
+reutilizando get_current_user e require_roles. Usuário sem autenticação
+válida recebe 401; ANALYST recebe 403. São operações GET sem escrita,
+portanto não exigem Origin ou token CSRF. As escritas anteriores mantêm
+suas verificações, e CORS não é liberado. As respostas usam no-store.
+
+| Endpoint | Conteúdo e ordenação |
+|---|---|
+| `GET /users` | id, username, role e status; username ASC e id ASC. |
+| `GET /audit-logs` | id, author_id, action, entity_type, entity_id, occurred_at, old_role e new_role; occurred_at DESC e id DESC. |
+
+GET /users é uma funcionalidade administrativa complementar para a futura
+interface. Não existe um RF específico de listagem de Users na spec, e
+esta entrega não atribui um requisito inexistente à funcionalidade.
+
+Em GET /users, os filtros opcionais role (ADMIN/ANALYST) e status
+(ACTIVE/INACTIVE) são combinados com AND. O total representa somente os
+registros correspondentes. User INACTIVE pode aparecer na listagem,
+mas não pode autenticar-se nem consultar os endpoints.
+
+### Paginação e parâmetros
+
+Ambos aceitam page, de 1 a 10.000, e page_size, de 1 a 100. Os padrões são
+page=1 e page_size=20. Offset e limite são aplicados pelo PostgreSQL, sem
+carregar a lista completa para paginar em Python. Uma página válida além
+do fim retorna items vazio e mantém o total, sem erro 404.
+
+As respostas têm o mesmo envelope:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+Exemplos de consulta: `/users?role=ANALYST&status=INACTIVE&page_size=20`
+e `/audit-logs?page=2&page_size=20`. Papel/estado inválidos, páginas fora
+dos limites, valores não inteiros e parâmetros desconhecidos retornam
+422 genérico, sem eco de entradas. Não há filtros extras de auditoria.
+
+A ordenação total inclui UUID para desempatar; em auditoria, dois eventos
+com occurred_at igual mantêm uma ordem determinística. Isso não cria um
+snapshot entre requisições. Total e itens usam SELECTs separados em READ
+COMMITTED: inserções/alterações concorrentes podem mudar páginas ou totais.
+Paginação por cursor ou snapshot estável não faz parte desta entrega.
+
+### Sigilo, preservação e arquitetura
+
+Os repositórios selecionam explicitamente apenas as colunas públicas.
+Schemas Pydantic controlam os campos de resposta; Users não incluem
+password_hash nem dados de sessões. Auditoria retorna o identificador do
+autor, sem juntar credenciais ou dados privados do User. old_role e
+new_role são nulos quando não há mudança de papel no evento persistido.
+
+As consultas não executam commit, não alteram os registros e não criam
+Audit Logs. O teste de leitura verifica os comandos SQL emitidos e compara
+os registros completos antes/depois. Não há POST/PATCH/PUT/DELETE de
+auditoria: tentativas na coleção recebem 405 e não modificam dados; as
+rotas de detalhe de mutação continuam inexistentes. RNF04 cobre as APIs
+disponibilizadas, sem prometer imutabilidade contra SQL direto no banco.
+
+API, validação de parâmetros, serviços e repositórios permanecem separados.
+O módulo compartilhado core/pagination contém apenas os limites de entrada
+e o envelope de resposta tipado; não adiciona um framework de consultas.
+User, AuditLog, Session Factory e os mecanismos de segurança são reutilizados.
+Não há migration, dependência externa ou alteração na estrutura do banco.
+
+RF28 é implementado pela consulta dos Audit Logs persistidos. RNF02/RF03
+são aplicados às duas rotas; a matriz inteira do MVP ainda depende das
+integrações dos demais módulos. RNF04 é preservado pela ausência de APIs
+de mutação e pelos testes de leitura sem efeitos colaterais.
+
+Os testes AAA cobrem ADMIN, ANALYST e anônimo, ordenação, filtros AND,
+paginação após filtros, páginas vazias, limites, desempate, campos corretos,
+sigilo e proteção contra mutação. Integração exclusivamente em mini_soc_test,
+com schemas isolados e rollback, preservando as regressões anteriores.
+
+feat/consultas-administrativas usa feat/gerenciamento-usuarios como base
+enquanto #22 estiver aberto. A ordem proposta continua #20 (autenticação),
+reconciliação de #19 (RBAC), #22 (gerenciamento) e o PR destas consultas.
+Nenhum merge ou reescrita de histórico é realizado automaticamente.
+
+## Interface web — Issue #25
+
+A interface usa Jinja2 com autoescape, HTML, CSS e JavaScript locais no mesmo
+monólito FastAPI (ADR-001). Não exige Node, build ou framework de front-end.
+Jinja2 é a única dependência nova de execução. Playwright é exclusivo dos
+testes de navegador; não participa da aplicação em produção.
+
+| Página | Acesso e comportamento |
+|---|---|
+| `/` | Redireciona para `/app`. |
+| `/login` | Pública; username/senha via JSON em POST /auth/login. |
+| `/app` | Sessão válida e User ACTIVE; identidade/papel por GET /auth/me. |
+| `/app/users` | Somente ADMIN; GET /users, filtros de papel/estado e paginação. |
+| `/app/audit-logs` | Somente ADMIN; GET /audit-logs, paginação e histórico recente primeiro. |
+
+### Acesso local
+
+Instale as dependências atualizadas. Utilize um banco de desenvolvimento já
+preparado pelas migrations anteriores e uma conta criada pelo procedimento
+de Administrator inicial acima. Esta entrega não cria conta, migration ou
+credencial padrão e não aplica migrations automaticamente.
+
+O endereço aberto no navegador deve corresponder exatamente a AUTH_ORIGIN,
+incluindo esquema, host e porta. Para desenvolvimento **exclusivamente em
+loopback HTTP**, configure no ambiente local ignorado pelo Git:
+
+```dotenv
+AUTH_ORIGIN=http://127.0.0.1:8000
+AUTH_COOKIE_SECURE=false
+```
+
+Na pasta backend, execute `python -m uvicorn app.main:app --reload` e abra
+[a página de login](http://127.0.0.1:8000/login). Não troque 127.0.0.1 por
+localhost sem ajustar AUTH_ORIGIN. A permissão existente de cookie sem
+Secure continua limitada a HTTP loopback. Em implantação, use HTTPS, origem
+correta e AUTH_COOKIE_SECURE=true (padrão); não exponha o servidor de
+desenvolvimento ou use esse exemplo HTTP em rede externa.
+
+### Organização e comportamento
+
+`backend/app/web/router.py` contém somente rotas de apresentação. Templates
+em `app/web/templates`: base.html (documento e recursos), login.html,
+shell.html (navegação autenticada), home.html, users.html, audit.html,
+pagination.html (fragmento compartilhado) e forbidden.html. `app/web/static`
+contém web.css e web.js, servidos em /static. Não há consulta SQL nos
+templates ou duplicação dos serviços de negócio.
+
+O servidor reutiliza get_current_user e require_roles. Páginas sem sessão
+válida redirecionam para o login; páginas administrativas negam ANALYST
+com 403 antes de renderizar seu conteúdo. APIs mantêm 401/403 e o contrato
+JSON anterior. O contexto Jinja contém somente flags/título/nome da página,
+nunca o objeto ORM, senha ou tokens. A identidade é recuperada por /auth/me.
+
+ADMIN encontra consultas reais de Users e auditoria. ANALYST vê sua conta
+e uma indicação de que ainda não há consultas disponíveis nesta entrega;
+não há links fictícios de Alerts/Investigations ou dashboard analítico.
+O gerenciamento visual de Users utiliza as operações existentes na API,
+conforme a Issue #27 descrita abaixo. Auditoria permanece somente leitura.
+
+Users mostra username, ADMIN/ANALYST e ACTIVE/INACTIVE textuais, filtros
+combinados e controles de página. Mudar filtros ou tamanho reinicia na
+página 1. O padrão é 20 itens, com opções 10/20/50/100 e teto de página
+10.000, respeitando a API. Auditoria mostra o **identificador do autor**,
+ação, tipo/identificador da entidade, horário e papel anterior/novo quando
+presentes. Não inventa nome histórico do autor nem busca usuários por linha.
+A ordem retornada pela API é preservada (occurred_at DESC, id DESC).
+Datas são formatadas em português no fuso America/Sao_Paulo, com indicação
+na tela; o timestamp persistido não é alterado. Ausência de valores aparece
+como travessão. As limitações de paginação concorrente da API permanecem.
+
+### Segurança e erros
+
+- fetch usa credentials: same-origin e cache: no-store, sem CORS novo.
+- O navegador fornece Origin no login/logout. O JavaScript não define esse
+  header e não cria outro mecanismo de autenticação.
+- Sessão permanece em cookie HttpOnly/Secure/SameSite=Strict. Não há JWT,
+  token de sessão em storage, URLs ou HTML. O token CSRF de /auth/me fica
+  somente na memória do script e é enviado no header X-CSRF-Token do logout.
+- Logout só confirma a saída após revogação no servidor; falhas mostram
+  feedback e não simulam sucesso. 401 conduz ao login. Expiração, revogação
+  e INACTIVE são revalidados no servidor em cada acesso; ao retornar à aba,
+  /auth/me também é reconsultado. Páginas restauradas do histórico recarregam.
+- Senha é limpa do campo após cada tentativa. Login inválido/inativo recebe
+  mensagem genérica; erros de API não exibem detalhes internos. Requisições
+  têm limite de espera de 15 segundos e permitem nova tentativa.
+- Sem JavaScript inline ou innerHTML. Dados de API são inseridos usando
+  textContent. CSP das páginas limita scripts/estilos/conexões à própria
+  origem, bloqueia frames, base e submissão nativa de formulário. Sem JS,
+  um aviso é mostrado e credenciais não são submetidas por navegação.
+- Páginas e recursos usam no-store, nosniff e no-referrer. Nenhum dado
+  de conta/sessão é embutido nos arquivos estáticos.
+
+Os controles visuais complementam o RBAC das páginas e APIs; não concedem
+permissão. A consulta de auditoria não cria, edita nem exclui eventos.
+RF01/RF02 são integrados pela tela, RF03/RNF02 pela autorização deste escopo,
+RF28 pela consulta e RNF04 pela preservação. RNF01/RNF09 e RF19.2 permanecem
+protegidos pelos componentes existentes e testes. A listagem de Users é
+complementar, sem RF específico; a matriz inteira do MVP continua pendente.
+
+### Testes e validação visual
+
+Após instalar requirements-dev.txt, instale uma vez o navegador de testes:
+
+```powershell
+python -m playwright install chromium
+python -m pytest tests/test_web.py -q
+python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70 -q
+```
+
+Os testes pytest executam o JavaScript em Chromium real. O transporte das
+requisições é direcionado ao app ASGI via TestClient, com os cookies e headers
+Origin produzidos pelo navegador, sem servidor externo ou certificado de
+teste. As APIs e o PostgreSQL são reais; somente cenários explícitos de erro
+interceptam respostas. O cookie jar do TestClient é esvaziado a cada envio
+para que somente o cookie do navegador autentique o fluxo. Integrações usam
+exclusivamente mini_soc_test, schemas aleatórios e rollback, reutilizando as
+fixtures anteriores. Nenhum usuário ou registro permanente é criado.
+
+Validação desta entrega: **286 testes aprovados**, incluindo 38 novos
+cenários web e todas as 248 regressões anteriores. Cobertura Python de app:
+**98,56%** (763 instruções, 11 não cobertas), acima da meta de 70%.
+
+A cobertura pytest-cov mede **Python**, não cobertura de instruções JS/CSS
+ou acessibilidade completa. A suíte inclui fluxos reais de login/logout,
+cookies/CSRF, páginas protegidas, filtros, paginação, listas vazias, erros,
+sigilo, XSS, sessão invalidada e atualização de papel. As regressões das
+entregas anteriores continuam obrigatórias.
+
+Roteiro manual para a Pessoa 2, com contas próprias no ambiente local:
+
+1. Abrir /login em desktop e largura móvel (390 px). Usar Tab/Enter, verificar
+   labels, foco visível, link de pular conteúdo, contraste e ausência de corte.
+2. Informar senha incorreta e conta inativa: mensagem genérica e campo limpo.
+   Testar indisponibilidade da API pelo DevTools, sem registrar credenciais.
+3. Entrar como ADMIN. Conferir username/papel e navegar para Users. Combinar
+   filtros, mudar tamanho, avançar/voltar e obter uma consulta sem resultados.
+4. Conferir auditoria com dados reais: autor por ID, ação, entidade, papéis,
+   horário em America/Sao_Paulo e ordem recente; em móvel, rolar só a tabela.
+5. Sair e tentar voltar/recarregar. Invalidar uma sessão pelo fluxo suportado
+   ou aguardar expiração e confirmar retorno ao login, sem dados restritos.
+6. Entrar como ANALYST: sem consultas administrativas; abrir suas URLs
+   diretamente deve retornar 403. APIs também devem negar o acesso.
+7. Pelo DevTools, conferir cookie HttpOnly/SameSite e Secure em HTTPS,
+   storage vazio, POST JSON de login e CSRF no logout. Não copiar tokens
+   para screenshots, relatórios ou Git. Conferir ausência de erros no console.
+
+Revisão manual com leitor de tela e validação de proxy/TLS real continuam
+recomendadas; o transporte ASGI da suíte não testa a implantação HTTPS.
+Esta branch depende de #24 -> #22 -> #19, além da promoção de autenticação
+em #20. Nenhum merge ou alteração de código da Pessoa 2 é realizado.
+
+## Gerenciamento visual de Users — Issue #27
+
+Em `/app/users`, ADMIN pode cadastrar, editar e desativar contas usando as
+APIs existentes. A página continua protegida por require_roles no servidor;
+ANALYST não recebe os formulários ou ações. Não há cadastro público.
+
+| Ação visual | Integração e campos |
+|---|---|
+| Novo usuário | POST /users com username, role e password; nova conta ACTIVE. |
+| Editar | PATCH /users/{id} com somente username e role; sem senha/status/UUID editáveis. |
+| Desativar | POST /users/{id}/deactivate após confirmação explícita. |
+
+O cadastro exige confirmação de senha no navegador; esse campo **não é
+enviado à API**. Campos obrigatórios/brancos e senhas divergentes recebem
+validação visual, sem normalizar ou truncar os valores válidos. Senhas são
+limpas antes do envio, ao cancelar/fechar e ao terminar a operação, inclusive
+em falhas. Não são gravadas em HTML, URLs, logs, localStorage ou sessionStorage.
+O navegador ainda pode oferecer seu próprio gerenciador de senhas; o código
+da aplicação não salva credenciais no storage.
+
+O botão Editar da própria conta é desabilitado com explicação textual.
+O contrato atual da API recusa **toda edição da própria conta**, inclusive
+username, além da proibição de alterar o próprio papel (RF25). A interface
+preserva esse comportamento. UUID e associações permanecem sob controle do
+servidor; não há controles para password_hash, id, status, reset ou reativação.
+
+Desativar abre um diálogo que identifica a conta e avisa sobre perda de
+acesso, revogação das sessões e preservação do histórico. O foco inicial é
+Cancelar. Cancelamento ou Escape antes do envio não efetuam requisição.
+INACTIVE tem a ação desabilitada; se os dados ficarem desatualizados, o
+conflito real da API é tratado. A regra do último ADMIN, a revogação e a
+auditoria continuam exclusivamente no back-end, sem contagem de admins ou
+criação de eventos pelo JavaScript. Autodesativação permitida pelo servidor
+conduz ao login após a sessão se tornar inválida.
+
+Após sucesso, o diálogo fecha e a listagem é recarregada na página 1,
+preservando filtros e tamanho. Um registro pode não aparecer se não atender
+aos filtros; a mensagem confirma a operação independentemente desse recorte.
+O link Consultar histórico de auditoria permite verificar os eventos reais
+em /app/audit-logs, que continua sem ações de alteração/exclusão.
+
+### Requisições e falhas
+
+Todas as três mutações enviam X-CSRF-Token da sessão em memória e JSON pelos
+componentes existentes de web.js. O navegador fornece Origin, e fetch usa
+credentials: same-origin. Não há JWT, CORS, endpoint, dependência, modelo ou
+migration novos. O módulo user-management.js é carregado somente na página
+de Users após /auth/me; recebe callbacks de escrita, atualização e tratamento
+de autenticação. Não duplica fetch, armazenamento de CSRF ou autenticação.
+O fragmento user-dialogs.html, o CSS e os diálogos nativos reutilizam o
+estilo da interface; dados de contas são inseridos por textContent/value.
+
+Enquanto uma mutação está pendente, envios repetidos, cancelamento, Escape,
+controles da listagem e logout são bloqueados; aria-busy e indicação de
+carregamento sinalizam o estado. Não há retry automático de escrita.
+
+- 401: fecha/limpa formulários e conteúdo da listagem e conduz ao login.
+- 403: fecha o formulário, informa negação e reconsulta a identidade; uma
+  remoção do papel ADMIN esconde os controles administrativos.
+- 409: mensagens conhecidas para username duplicado, último ADMIN e conta
+  já inativa; outros conflitos recebem mensagem genérica.
+- 422: solicita correção de campos, sem eco do payload.
+- 404: orienta atualizar a listagem do alvo inexistente.
+- 500, timeout ou rede: não confirma sucesso; orienta fechar e consultar o
+  estado atual antes de repetir. Uma resposta perdida pode ocorrer após o
+  servidor confirmar a operação; o cliente não promete execução exatamente
+  uma vez. A proteção de duplicação cobre envios locais simultâneos, sem
+  introduzir chaves de idempotência ou alterar o contrato da API.
+
+Somente mensagens fixas/conhecidas de erro são exibidas, nunca detalhes
+arbitrários recebidos da API. A CSP e as proteções de cookie/CSRF anteriores
+continuam ativas. API e servidor seguem responsáveis por todas as decisões
+de autorização e regras de negócio, independentemente do estado visual.
+
+### Requisitos e validação
+
+RF19.1/RF30 são integrados pelos formulários, RF19.2 pela confirmação e
+desativação, RF25 pelo bloqueio visual e validação existente no servidor,
+RF31 pelos conflitos retornados pelo back-end e RF15.1/RF26 pela auditoria
+atômica já implementada. RF03/RNF02 são preservados neste escopo, sem
+declarar concluída a matriz inteira do MVP. spec.md e ADR não são alterados.
+
+Execute na pasta backend, com Chromium instalado conforme as instruções
+anteriores:
+
+```powershell
+python -m pytest tests/test_web_user_management.py tests/test_web.py -q
+python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70 -q
+```
+
+As suítes compartilham uma única fixture Chromium de sessão em conftest.py;
+as verificações anteriores foram preservadas. Novos testes AAA cobrem
+cadastro ADMIN/ANALYST, confirmação/limpeza de senha, dados inválidos,
+duplicação, edição de username/papel, UUID/hash preservados, auditoria única,
+própria conta, último ADMIN, confirmação/cancelamento, sessões revogadas,
+CSRF nas três mutações, alteração de papel durante o formulário, erros,
+rede, atualização com filtros, envios duplicados, XSS, teclado e dimensões
+desktop/móvel. Screenshots de layout com dados sintéticos são criados no
+diretório temporário do pytest, sem senha preenchida ou tokens visíveis.
+Integração usa somente mini_soc_test, schemas isolados e rollback; nenhum
+dado de desenvolvimento é alterado. Cobertura pytest-cov refere-se a Python,
+não a instruções JS/CSS nem conformidade integral de acessibilidade.
+
+Resultado desta entrega: **320 testes aprovados**, com 34 novos cenários e
+as 286 regressões anteriores preservadas. Cobertura Python geral de app:
+**98,56%** (763 instruções, 11 não cobertas), acima da meta de 70%.
+
+Roteiro manual em ambiente de validação com contas de teste:
+
+1. Como ADMIN, abrir /app/users e Novo usuário. Navegar por Tab/Shift+Tab,
+   preencher cada papel, conferir divergência de senha e concluir cadastro.
+2. Editar username e papel de outra conta. Conferir retorno à listagem,
+   filtros preservados, própria edição indisponível e auditoria real única.
+3. Abrir Desativar, ler o aviso e cancelar por botão/Escape. Reabrir e
+   confirmar para uma conta de teste; verificar INACTIVE e perda de acesso
+   da sessão dessa conta. Verificar conflito do último ADMIN em ambiente
+   controlado, sem duplicar a regra na tela.
+4. Simular erros de rede/API no DevTools, conferir feedback e ausência de
+   reenvio automático. Validar que logout e escrita continuam com CSRF.
+5. Repetir em 1440x1000 e 390x844: foco nos diálogos, retorno ao acionador,
+   rolagem interna, mensagens e navegação por leitor de tela. ANALYST deve
+   continuar sem a página/ações administrativas.
+
+Revisão manual com leitor de tela e proxy/TLS real continua pendente. Não
+há reset, reativação, exclusão física ou edição de auditoria. Esta entrega
+depende de #26 -> #24 -> #22 -> #19 e da promoção em #20, sem merge automático.
 
 ## Estado da entrega de persistência — Issue #7
 

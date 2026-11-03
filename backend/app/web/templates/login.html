@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Entrar{% endblock %}
+{% block body %}
+<div class="login-layout">
+  <aside class="login-brand" aria-label="Sobre o Mini SOC">
+    <a class="brand" href="/login"><span class="brand-mark" aria-hidden="true">M</span>Mini SOC</a>
+    <div class="brand-copy">
+      <p class="eyebrow">CENTRO DE OPERAÇÕES</p>
+      <h1>Segurança começa<br>com visibilidade.</h1>
+      <p>Um ambiente acadêmico para monitoramento e gestão de incidentes de segurança.</p>
+      <div class="brand-rule"></div>
+      <p class="brand-note">Acesso individual. Operações autorizadas.<br>Histórico preservado.</p>
+    </div>
+    <p class="brand-footer">MINI SOC <span>AMBIENTE ACADÊMICO</span></p>
+  </aside>
+  <main id="main" class="login-main">
+    <section class="login-card" aria-labelledby="login-title">
+      <p class="eyebrow">ACESSO AO AMBIENTE</p>
+      <h2 id="login-title">Bem-vindo de volta</h2>
+      <p class="muted">Entre com sua conta para continuar.</p>
+      <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+      <form id="login-form" action="/login" method="post">
+        <label for="username">Nome de usuário</label>
+        <input id="username" name="username" autocomplete="username" required autocapitalize="none" spellcheck="false">
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit" class="primary login-submit">Entrar no Mini SOC <span aria-hidden="true">→</span></button>
+      </form>
+      <p class="login-help">Precisa de acesso? Solicite uma conta ao administrador do ambiente.</p>
+    </section>
+    <p class="login-footnote">Acesso restrito a usuários autorizados.</p>
+  </main>
+</div>
+{% endblock %}
