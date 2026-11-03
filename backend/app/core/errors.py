@@ -11,7 +11,7 @@ logger = logging.getLogger("mini_soc.server")
 
 
 async def validation_error(request: Request, error: RequestValidationError):
-    if request.url.path.startswith("/auth/"):
+    if request.url.path.startswith(("/auth/", "/users")):
         return JSONResponse(
             status_code=422, content={"detail": "Requisição inválida."},
             headers={"Cache-Control": "no-store"},
