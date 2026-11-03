@@ -1,5 +1,106 @@
 # Mini SOC
 
+## Importação de Logs - Issue #40
+
+`POST /logs/import` recebe o conteúdo de um arquivo JSON no corpo
+`application/json`: lista de 1 a 1.000 itens. Não há multipart, tela ou dependência
+nova de upload. É uma escrita exclusiva de ADMIN ativo, com sessão, Origin e
+CSRF existentes. Logs persistidos não são avaliados pelo motor nesta entrega.
+
+Cada item exige event_id, asset_id, occurred_at, event_type e username. Asset é
+referenciado pelo UUID existente, inclusive se estiver INACTIVE. Os tipos são
+AUTH_FAILURE, AUTH_SUCCESS e ADMIN_ACCESS. occurred_at exige ISO 8601 com offset;
+o banco armazena o instante com semântica de timestamp with time zone.
+event_id e username são textos não vazios, preservados sem normalização ou
+truncamento. Campos desconhecidos rejeitam somente o registro correspondente.
+username não referencia User: é uma conta do ambiente monitorado.
+
+Resposta HTTP 200 após commit, mesmo se todos os itens forem rejeitados:
+
+```json
+{
+  "accepted": 1,
+  "rejected": 1,
+  "rejections": [
+    {"position": 2, "reason": "duplicate_event_id", "detail": "event_id já persistido."}
+  ]
+}
+```
+
+As posições começam em 1 na ordem original. As razões são fixas e não refletem
+payloads: invalid_record, invalid_event_id, invalid_asset_id, invalid_occurred_at,
+invalid_event_type, invalid_username, asset_not_found e duplicate_event_id.
+JSON malformado, corpo que não é lista ou tamanho inválido retornam 422 genérico;
+conteúdo não application/json retorna 415. Respostas usam Cache-Control no-store.
+
+A unicidade é aplicada no PostgreSQL com chave primária event_id e INSERT ON
+CONFLICT DO NOTHING RETURNING. Duplicatas intra/interlotes ou concorrentes não
+substituem o registro original. A validação do Asset usa a tabela compartilhada;
+FK RESTRICT protege os Logs de exclusões que destruiriam seu histórico.
+Nenhum cache em memória é usado como fonte de verdade para a deduplicação.
+
+O serviço não confirma transações. O endpoint faz commit uma única vez antes
+de responder; falha operacional inesperada reverte todo o lote. Rejeições
+previstas por registro não abortam os demais itens válidos. A role/atividade
+do autor é revalidada com bloqueio de sua linha durante a importação.
+
+O logger compartilhado registra instante, operação e categoria para rejeições,
+validação estrutural, conteúdo inválido e falhas inesperadas, sem corpo integral,
+senhas, tokens, hashes ou valores de contas/eventos. Nenhuma nova auditoria de
+importação foi adicionada: RF15.1 não exige esse evento.
+
+Migration `0005_create_logs`, após `0004_create_assets`, cria somente logs e suas
+constraints. Reutiliza Base.metadata, Engine, Settings, Session Factory e Alembic.
+Não altera tabelas anteriores. Downgrade destrutivo permanece bloqueado.
+
+### Rastreabilidade de Logs
+
+| Referência | Implementação e limite |
+|---|---|
+| RF06 / seção 3.1 | Validação e persistência individual com Asset existente e offset explícito. |
+| RF21 | Rejeição parcial, contagens após commit e razões por posição original. |
+| RF22, persistência | Unicidade real inclusive concorrente; nenhuma substituição do original. Integração com Alerts ainda pendente. |
+| RF03/RNF02 | ADMIN autenticado/ativo, autorização no servidor e Origin/CSRF existentes. |
+| RF05/RN05 | Asset inativo e histórico aceitos/preservados; FK impede exclusão destrutiva do Asset. |
+| RNF09 | Respostas e logging sanitizados sem payloads privados. |
+| RNF03, parcial | Leitura e integridade no PostgreSQL entre sessões; recuperação após reinício do MVP não comprovada. |
+
+Os contratos aprovados da Issue #40 estão na seção 3.1.1 da spec. A ingestão
+aceita eventos históricos; a regra de ordem da seção 8.2 pertence à futura
+avaliação do motor. Aceito nesta resposta não significa processado por Detection
+Rules. Não se afirma RF07/RF08, RNF06 ou o fluxo completo de RF22 concluídos.
+
+Dentro de backend, com `.env.test` exclusivamente para mini_soc_test:
+
+```powershell
+python -m pytest tests/test_logs.py --cov=app.logs --cov-branch --cov-report=term-missing -q
+python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70 -q
+```
+
+Os testes comuns reutilizam schemas/transações/savepoints/rollback das fixtures
+existentes. O teste de concorrência usa duas conexões e um schema exclusivo com
+nome aleatório, verifica o banco real, confirma apenas seus dados e remove só
+esse schema ao terminar. Nenhum objeto preexistente é removido.
+
+Validação local no Python 3.14.10: 528 testes aprovados em 172,82 s, cobertura
+geral 99,24% e cobertura de linhas de Logs em 100%. São 68 casos novos de Logs,
+incluindo duas transações concorrentes, limites 1/1.000, recusas, logging sem
+payloads, constraints, proteção de histórico e falha de commit. Regressões de
+Assets, autenticação, autorização, auditoria, motor e web/Chromium preservadas.
+O primeiro passe específico executou 64 casos e reportou 97% de cobertura
+combinada de linhas/ramificações (arredondada); os quatro casos restantes foram incluídos
+na execução completa. Dependências conferidas sem incompatibilidades.
+
+Foi testado um snapshot exato da main 7e4c071 mais esta entrega, com PostgreSQL
+17.11 portátil separado, somente loopback, mini_soc_test e role de aplicação
+sem privilégios administrativos. O conteúdo Python final do clone foi conferido
+contra o snapshot testado. Nenhuma configuração/credencial de desenvolvimento
+foi usada. Resultados locais não significam aprovação de CI remoto ou revisão.
+
+Fora do escopo: consulta/filtros de Logs (RF27), interface web, estado durável do
+motor, persistência de Rules/Alerts, Dashboard e processamento retrospectivo de
+detecções. Essas funcionalidades continuam para entregas futuras.
+
 ## Assets - Issue #38
 
 O módulo `app/assets` implementa cadastro, alteração de nome/tipo e desativação
@@ -643,13 +744,15 @@ simular mudança de papel e inatividade diretamente no banco.
 
 RF03 e RNF02 estão atendidos pela infraestrutura reutilizável e pelos
 cenários isolados, mas não são declarados integralmente concluídos no MVP.
-Os endpoints futuros de Logs, Detection Rules, Alerts, Investigations,
+Os endpoints futuros de Detection Rules, Alerts, Investigations,
 Incidents e Dashboard ainda precisam integrar as dependências
 apropriadas quando forem implementados. Login, consulta do próprio perfil
 e logout continuam com as proteções de autenticação/CSRF existentes, sem
 restrição administrativa adicional. O health check permanece público.
 As rotas administrativas de Users da Issue #21 e de Assets da Issue #38 já usam
 ADMIN explicitamente. A consulta de Audit Logs também usa ADMIN no servidor.
+A importação de Logs da Issue #40 também usa ADMIN. Consulta de Logs (RF27)
+continua pendente para ADMIN e ANALYST conforme a matriz aprovada.
 
 Essa entrega de infraestrutura RBAC não criou endpoints de negócio, alteração de papéis, auditoria,
 JWT, tabelas ou migrations e não altera o código da Pessoa 2. O app de

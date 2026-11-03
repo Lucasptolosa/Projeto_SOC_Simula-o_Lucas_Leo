@@ -45,14 +45,14 @@ Log → Detection Rule → Alert → Investigation
 
 **Configuração das Detection Rules:** O MVP possui três Detection Rules predefinidas (`DR01`, `DR02` e `DR03`). Seus parâmetros e sua Severity são fixos conforme a seção 8. O Administrator poderá ativá-las ou desativá-las, mas não cadastrar novos tipos nem alterar seus parâmetros pela aplicação.
 
-### 3.1 Formato proposto de entrada de Logs
+### 3.1 Formato de entrada de Logs
 
 Um lote será recebido como um **arquivo JSON com uma lista de 1 a 1.000 objetos**. Cada objeto deverá seguir este exemplo:
 
 ```json
 {
   "event_id": "evt-001",
-  "asset_id": "srv-01",
+  "asset_id": "11111111-1111-4111-8111-111111111111",
   "occurred_at": "2026-10-08T14:03:00-03:00",
   "event_type": "AUTH_FAILURE",
   "username": "usuario1"
@@ -60,6 +60,49 @@ Um lote será recebido como um **arquivo JSON com uma lista de 1 a 1.000 objetos
 ```
 
 Os campos são obrigatórios. `event_id` deve ser único; `asset_id` deve referenciar um Asset existente; `occurred_at` deve conter data/hora e fuso; `event_type` deve pertencer a um dos três tipos de Log citados.
+
+O UUID do exemplo é ilustrativo e deve ser substituído pelo identificador de um
+Asset realmente cadastrado.
+
+#### 3.1.1 Contrato da importação de Logs - Issue #40
+
+- `event_id` e `username` são textos não vazios e não compostos somente de
+  whitespace. Não há normalização, truncamento ou limite arbitrário de tamanho.
+- `asset_id` é UUID e referencia Asset existente. Logs de Assets `INACTIVE`
+  também são aceitos, inclusive eventos históricos. O estado do Asset não é
+  alterado pela importação.
+- Campos desconhecidos, campos obrigatórios ausentes e valores inválidos
+  rejeitam somente o item correspondente. `occurred_at` deve ser data/hora
+  ISO 8601 com offset explícito; um instante numérico não substitui esse formato.
+- `username` é a conta monitorada, sem FK ou exigência de cadastro em User.
+- A unicidade de `event_id` é garantida pelo banco, inclusive em lotes distintos
+  ou concorrentes. Em um mesmo lote, o primeiro registro válido persistido com
+  esse identificador é aceito; repetições são rejeitadas sem substituir o original.
+- O conteúdo do arquivo JSON é enviado no corpo de `POST /logs/import` com
+  `Content-Type: application/json`, como lista de 1 a 1.000 itens. Não há upload
+  multipart nesta entrega. A operação é exclusiva de ADMIN autenticado e ativo,
+  com as proteções existentes de Origin e CSRF.
+- Um lote processado retorna HTTP 200, inclusive quando todos os itens forem
+  rejeitados. A resposta contém `accepted`, `rejected` e `rejections`, com
+  `position` a partir de 1 na ordem original, `reason` e `detail` fixos, sem
+  reproduzir os valores enviados. Aceitos mais rejeitados totalizam o lote.
+- JSON malformado, corpo que não é lista ou tamanho fora de 1 a 1.000 retornam
+  HTTP 422 sem gravar Logs. Conteúdo não application/json retorna HTTP 415.
+- Motivos por item: `invalid_record`, `invalid_event_id`, `invalid_asset_id`,
+  `invalid_occurred_at`, `invalid_event_type`, `invalid_username`, `asset_not_found`
+  ou `duplicate_event_id`. A primeira falha de validação basta para rejeitar o item.
+- Contagens de sucesso só são devolvidas após commit. Falha operacional
+  inesperada reverte a transação do lote inteiro e retorna erro genérico;
+  rejeições previstas por registro não impedem os demais itens válidos.
+- Logs já persistidos são preservados após desativação do Asset. A relação
+  referencial bloqueia exclusão que destruiria esse histórico.
+
+Nesta entrega, aceitação significa validação e persistência, não execução de
+Detection Rules. RF07/RF08 e a continuidade/ordenação de detecção da seção 8.2
+continuam exigidos na integração futura do motor. A camada de ingestão não
+rejeita um evento válido por ser anterior a outro já importado. Consulta de
+Logs (RF27), interface, auditoria adicional de importação e política de
+reprocessamento de detecção não são adicionadas pela Issue #40.
 
 ### 3.2 Contratos de gerenciamento de Assets
 
