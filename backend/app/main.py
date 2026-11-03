@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.auth.router import router as auth_router
 from app.users.router import router as users_router
 from app.audit.router import router as audit_router
+from app.assets.router import router as assets_router
 from app.core.errors import server_error, validation_error
 from app.web.router import DIRECTORY, router as web_router
 
@@ -13,6 +14,7 @@ app = FastAPI(title="Mini SOC")
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(audit_router)
+app.include_router(assets_router)
 app.include_router(web_router)
 app.mount("/static", StaticFiles(directory=DIRECTORY / "static"), name="static")
 app.add_exception_handler(RequestValidationError, validation_error)
@@ -24,7 +26,7 @@ async def auth_no_cache(request, call_next):
         response = await call_next(request)
     except Exception as error:
         response = await server_error(request, error)
-    if request.url.path.startswith(("/auth/", "/users", "/audit-logs")):
+    if request.url.path.startswith(("/auth/", "/users", "/audit-logs", "/assets")):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     if request.url.path in {"/", "/login", "/app"} or request.url.path.startswith(("/app/", "/static/")):
