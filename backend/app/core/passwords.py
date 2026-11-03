@@ -3,7 +3,7 @@ from base64 import b64decode, b64encode
 from binascii import Error as Base64Error
 
 from argon2 import PasswordHasher, extract_parameters
-from argon2.exceptions import InvalidHashError
+from argon2.exceptions import InvalidHashError, VerificationError
 from argon2.low_level import Type
 
 
@@ -23,6 +23,14 @@ def hash_password(password: str) -> str:
     if not isinstance(password, str) or not password.strip():
         raise ValueError("A senha deve ser não vazia.")
     return _hasher.hash(password)
+
+
+def verify_password(password: str, encoded: str) -> bool:
+    try:
+        validate_password_hash(encoded)
+        return _hasher.verify(encoded, password)
+    except (VerificationError, InvalidHashError, ValueError):
+        return False
 
 
 def validate_password_hash(value: str) -> str:
