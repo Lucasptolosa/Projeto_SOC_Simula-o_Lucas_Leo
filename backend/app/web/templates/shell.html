@@ -20,7 +20,7 @@
       <div class="account"><div><span id="current-username">Carregando conta…</span><span id="current-role" class="account-role"></span></div><button id="logout" type="button" class="quiet" disabled>Sair</button></div>
     </header>
     <main id="main" class="content">
-      <div class="page-heading"><div><p class="eyebrow">{% if page == 'home' %}AMBIENTE DE TRABALHO{% else %}ADMINISTRAÇÃO{% endif %}</p><h1>{{ title }}</h1></div>{% if page != 'home' %}<span class="readonly">Somente consulta</span>{% endif %}</div>
+      <div class="page-heading"><div><p class="eyebrow">{% if page == 'home' %}AMBIENTE DE TRABALHO{% else %}ADMINISTRAÇÃO{% endif %}</p><h1>{{ title }}</h1></div>{% if page == 'audit' %}<span class="readonly">Somente consulta</span>{% endif %}</div>
       <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
       <button id="retry" type="button" class="quiet" hidden>Tentar novamente</button>
       {% block content %}{% endblock %}

@@ -711,8 +711,8 @@ nunca o objeto ORM, senha ou tokens. A identidade é recuperada por /auth/me.
 ADMIN encontra consultas reais de Users e auditoria. ANALYST vê sua conta
 e uma indicação de que ainda não há consultas disponíveis nesta entrega;
 não há links fictícios de Alerts/Investigations ou dashboard analítico.
-Users permanece somente leitura; criar, editar e desativar pela interface
-fica para outra Issue, mesmo com as operações já existentes na API.
+O gerenciamento visual de Users utiliza as operações existentes na API,
+conforme a Issue #27 descrita abaixo. Auditoria permanece somente leitura.
 
 Users mostra username, ADMIN/ANALYST e ACTIVE/INACTIVE textuais, filtros
 combinados e controles de página. Mudar filtros ou tamanho reinicia na
@@ -805,6 +805,133 @@ Revisão manual com leitor de tela e validação de proxy/TLS real continuam
 recomendadas; o transporte ASGI da suíte não testa a implantação HTTPS.
 Esta branch depende de #24 -> #22 -> #19, além da promoção de autenticação
 em #20. Nenhum merge ou alteração de código da Pessoa 2 é realizado.
+
+## Gerenciamento visual de Users — Issue #27
+
+Em `/app/users`, ADMIN pode cadastrar, editar e desativar contas usando as
+APIs existentes. A página continua protegida por require_roles no servidor;
+ANALYST não recebe os formulários ou ações. Não há cadastro público.
+
+| Ação visual | Integração e campos |
+|---|---|
+| Novo usuário | POST /users com username, role e password; nova conta ACTIVE. |
+| Editar | PATCH /users/{id} com somente username e role; sem senha/status/UUID editáveis. |
+| Desativar | POST /users/{id}/deactivate após confirmação explícita. |
+
+O cadastro exige confirmação de senha no navegador; esse campo **não é
+enviado à API**. Campos obrigatórios/brancos e senhas divergentes recebem
+validação visual, sem normalizar ou truncar os valores válidos. Senhas são
+limpas antes do envio, ao cancelar/fechar e ao terminar a operação, inclusive
+em falhas. Não são gravadas em HTML, URLs, logs, localStorage ou sessionStorage.
+O navegador ainda pode oferecer seu próprio gerenciador de senhas; o código
+da aplicação não salva credenciais no storage.
+
+O botão Editar da própria conta é desabilitado com explicação textual.
+O contrato atual da API recusa **toda edição da própria conta**, inclusive
+username, além da proibição de alterar o próprio papel (RF25). A interface
+preserva esse comportamento. UUID e associações permanecem sob controle do
+servidor; não há controles para password_hash, id, status, reset ou reativação.
+
+Desativar abre um diálogo que identifica a conta e avisa sobre perda de
+acesso, revogação das sessões e preservação do histórico. O foco inicial é
+Cancelar. Cancelamento ou Escape antes do envio não efetuam requisição.
+INACTIVE tem a ação desabilitada; se os dados ficarem desatualizados, o
+conflito real da API é tratado. A regra do último ADMIN, a revogação e a
+auditoria continuam exclusivamente no back-end, sem contagem de admins ou
+criação de eventos pelo JavaScript. Autodesativação permitida pelo servidor
+conduz ao login após a sessão se tornar inválida.
+
+Após sucesso, o diálogo fecha e a listagem é recarregada na página 1,
+preservando filtros e tamanho. Um registro pode não aparecer se não atender
+aos filtros; a mensagem confirma a operação independentemente desse recorte.
+O link Consultar histórico de auditoria permite verificar os eventos reais
+em /app/audit-logs, que continua sem ações de alteração/exclusão.
+
+### Requisições e falhas
+
+Todas as três mutações enviam X-CSRF-Token da sessão em memória e JSON pelos
+componentes existentes de web.js. O navegador fornece Origin, e fetch usa
+credentials: same-origin. Não há JWT, CORS, endpoint, dependência, modelo ou
+migration novos. O módulo user-management.js é carregado somente na página
+de Users após /auth/me; recebe callbacks de escrita, atualização e tratamento
+de autenticação. Não duplica fetch, armazenamento de CSRF ou autenticação.
+O fragmento user-dialogs.html, o CSS e os diálogos nativos reutilizam o
+estilo da interface; dados de contas são inseridos por textContent/value.
+
+Enquanto uma mutação está pendente, envios repetidos, cancelamento, Escape,
+controles da listagem e logout são bloqueados; aria-busy e indicação de
+carregamento sinalizam o estado. Não há retry automático de escrita.
+
+- 401: fecha/limpa formulários e conteúdo da listagem e conduz ao login.
+- 403: fecha o formulário, informa negação e reconsulta a identidade; uma
+  remoção do papel ADMIN esconde os controles administrativos.
+- 409: mensagens conhecidas para username duplicado, último ADMIN e conta
+  já inativa; outros conflitos recebem mensagem genérica.
+- 422: solicita correção de campos, sem eco do payload.
+- 404: orienta atualizar a listagem do alvo inexistente.
+- 500, timeout ou rede: não confirma sucesso; orienta fechar e consultar o
+  estado atual antes de repetir. Uma resposta perdida pode ocorrer após o
+  servidor confirmar a operação; o cliente não promete execução exatamente
+  uma vez. A proteção de duplicação cobre envios locais simultâneos, sem
+  introduzir chaves de idempotência ou alterar o contrato da API.
+
+Somente mensagens fixas/conhecidas de erro são exibidas, nunca detalhes
+arbitrários recebidos da API. A CSP e as proteções de cookie/CSRF anteriores
+continuam ativas. API e servidor seguem responsáveis por todas as decisões
+de autorização e regras de negócio, independentemente do estado visual.
+
+### Requisitos e validação
+
+RF19.1/RF30 são integrados pelos formulários, RF19.2 pela confirmação e
+desativação, RF25 pelo bloqueio visual e validação existente no servidor,
+RF31 pelos conflitos retornados pelo back-end e RF15.1/RF26 pela auditoria
+atômica já implementada. RF03/RNF02 são preservados neste escopo, sem
+declarar concluída a matriz inteira do MVP. spec.md e ADR não são alterados.
+
+Execute na pasta backend, com Chromium instalado conforme as instruções
+anteriores:
+
+```powershell
+python -m pytest tests/test_web_user_management.py tests/test_web.py -q
+python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70 -q
+```
+
+As suítes compartilham uma única fixture Chromium de sessão em conftest.py;
+as verificações anteriores foram preservadas. Novos testes AAA cobrem
+cadastro ADMIN/ANALYST, confirmação/limpeza de senha, dados inválidos,
+duplicação, edição de username/papel, UUID/hash preservados, auditoria única,
+própria conta, último ADMIN, confirmação/cancelamento, sessões revogadas,
+CSRF nas três mutações, alteração de papel durante o formulário, erros,
+rede, atualização com filtros, envios duplicados, XSS, teclado e dimensões
+desktop/móvel. Screenshots de layout com dados sintéticos são criados no
+diretório temporário do pytest, sem senha preenchida ou tokens visíveis.
+Integração usa somente mini_soc_test, schemas isolados e rollback; nenhum
+dado de desenvolvimento é alterado. Cobertura pytest-cov refere-se a Python,
+não a instruções JS/CSS nem conformidade integral de acessibilidade.
+
+Resultado desta entrega: **320 testes aprovados**, com 34 novos cenários e
+as 286 regressões anteriores preservadas. Cobertura Python geral de app:
+**98,56%** (763 instruções, 11 não cobertas), acima da meta de 70%.
+
+Roteiro manual em ambiente de validação com contas de teste:
+
+1. Como ADMIN, abrir /app/users e Novo usuário. Navegar por Tab/Shift+Tab,
+   preencher cada papel, conferir divergência de senha e concluir cadastro.
+2. Editar username e papel de outra conta. Conferir retorno à listagem,
+   filtros preservados, própria edição indisponível e auditoria real única.
+3. Abrir Desativar, ler o aviso e cancelar por botão/Escape. Reabrir e
+   confirmar para uma conta de teste; verificar INACTIVE e perda de acesso
+   da sessão dessa conta. Verificar conflito do último ADMIN em ambiente
+   controlado, sem duplicar a regra na tela.
+4. Simular erros de rede/API no DevTools, conferir feedback e ausência de
+   reenvio automático. Validar que logout e escrita continuam com CSRF.
+5. Repetir em 1440x1000 e 390x844: foco nos diálogos, retorno ao acionador,
+   rolagem interna, mensagens e navegação por leitor de tela. ANALYST deve
+   continuar sem a página/ações administrativas.
+
+Revisão manual com leitor de tela e proxy/TLS real continua pendente. Não
+há reset, reativação, exclusão física ou edição de auditoria. Esta entrega
+depende de #26 -> #24 -> #22 -> #19 e da promoção em #20, sem merge automático.
 
 ## Estado da entrega de persistência — Issue #7
 

@@ -4,7 +4,7 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from playwright.sync_api import expect, sync_playwright
+from playwright.sync_api import expect
 from sqlalchemy import select
 
 from app.audit.models import AuditLog
@@ -57,14 +57,6 @@ def web_context(users_db, test_db_settings, request):
     finally:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(previous)
-
-
-@pytest.fixture(scope="session")
-def chromium():
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        yield browser
-        browser.close()
 
 
 @pytest.fixture
