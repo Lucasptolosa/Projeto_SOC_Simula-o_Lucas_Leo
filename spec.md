@@ -61,6 +61,30 @@ Um lote será recebido como um **arquivo JSON com uma lista de 1 a 1.000 objetos
 
 Os campos são obrigatórios. `event_id` deve ser único; `asset_id` deve referenciar um Asset existente; `occurred_at` deve conter data/hora e fuso; `event_type` deve pertencer a um dos três tipos de Log citados.
 
+### 3.2 Contratos de gerenciamento de Assets
+
+Detalhamento dos RF04, RF05 e RF29 alinhado na Issue #38:
+
+- O identificador de Asset é UUID gerado pelo servidor. Nome não é único;
+  Assets distintos podem possuir o mesmo nome. Não há normalização automática
+  de nome nem limite adicional de tamanho definido pelo MVP. Nome deve ser
+  textual, não vazio e não composto somente por espaços em branco.
+- O cadastro recebe `name`, `type` e `status`, todos obrigatórios. Tipos e
+  estados são exatamente os enumerados na seção 3, sem conversão de caixa.
+- A alteração recebe somente `name` e/ou `type`, inclusive para um Asset
+  `INACTIVE`. Identificador, estado e associações históricas são preservados.
+  Campos desconhecidos, campos protegidos e valores nulos são rejeitados.
+  Uma solicitação de alteração sem campos é inválida.
+- A desativação altera `ACTIVE` para `INACTIVE`. Se o Asset já estiver
+  `INACTIVE`, retorna seu estado atual sem nova alteração nem novo Audit Log.
+- Não há exclusão física nem operação de reativação nesta entrega.
+- Mutações reais bem-sucedidas devem gerar o Audit Log previsto no RF15.1,
+  na mesma transação da alteração do Asset. Falha em uma das gravações deve
+  reverter ambas. Uma repetição sem mutação não cria auditoria de alteração.
+
+Esses contratos não definem política de importação para Asset inativo nem
+significam que Logs/Alerts já estejam persistidos ou integrados.
+
 ## 4. Requisitos funcionais (RF)
 
 **RF01:** WHEN um User ativo informar nome de usuário e senha correspondentes aos valores cadastrados, THE SYSTEM SHALL autenticá-lo;   

@@ -1,5 +1,31 @@
 # Mini SOC
 
+## Assets - Issue #38 em implementação
+
+Nesta branch existem o modelo `app/assets/models.py`, os contratos de entrada
+e saída em `app/assets/schemas.py` e 42 testes puros em `test_asset_contracts.py`.
+Os detalhes alinhados estão na seção 3.2 de `spec.md`: UUID gerado pelo servidor,
+nome sem unicidade, cadastro com nome/tipo/estado, alteração somente de nome/tipo
+inclusive em inativos e desativação repetida sem mutação nem nova auditoria.
+
+Validação parcial no Python 3.14.10: 42 testes de Assets e 46 regressões do motor
+aprovados; cobertura de linhas dos modelos/schemas de Assets em 100%.
+Não foram executados testes de banco. Nenhum requisito de persistência ou fluxo
+completo é declarado atendido por esses testes de contrato.
+
+Ainda faltam migration, registro no Alembic, serviços transacionais, API e testes
+de integração. A auditoria compartilhada existe fora da main na integração
+administrativa da Pessoa 1. Sua base de integração precisa ser definida antes
+de concluir RF15.1; não foi criada infraestrutura de auditoria duplicada.
+O estado intermediário desta branch não está pronto para merge ou para aplicar
+migrations: o modelo Asset ainda não possui revisão Alembic correspondente.
+
+Para repetir somente a validação parcial, dentro de `backend`:
+
+```powershell
+python -m pytest --noconftest tests/test_asset_contracts.py tests/test_detection_engine.py tests/test_detection_validation.py -q
+```
+
 Sistema acadêmico de monitoramento de segurança, desenvolvido para receber logs simulados, aplicar regras de detecção, gerar alertas e permitir a investigação e o tratamento de incidentes.
 
 Projeto de Modelagem de Sistemas desenvolvido por Lucas e Leonardo.
