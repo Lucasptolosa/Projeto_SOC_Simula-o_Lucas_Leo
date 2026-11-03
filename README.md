@@ -184,6 +184,116 @@ confirmar explicitamente sua transação com `session.commit()` ou usar
 `with session.begin():`. O encerramento da dependência fecha a sessão e
 desfaz qualquer gravação ainda não confirmada, inclusive após uma exceção.
 
+## Integração contínua — Issue #29
+
+CI (integração contínua) executa verificações automaticamente para detectar
+regressões antes da integração. O workflow `.github/workflows/testes.yml`
+executa em abertura, atualização e reabertura de Pull Requests e em pushes
+na main. Não há filtro de branch-base para PRs: também aceita PRs empilhados
+quando o workflow estiver presente no checkout correspondente.
+
+O job Pytest e cobertura usa Ubuntu 24.04 e Python 3.14, instala as
+dependências de `backend/requirements-dev.txt` do próprio checkout e executa
+toda a suíte disponível. No evento pull_request, o checkout padrão testa o
+commit de integração proposto pelo GitHub, incluindo a base do PR. Nenhum
+módulo de autenticação, interface ou outro PR futuro é exigido pela CI.
+
+Após instalar as dependências, o workflow procura o pacote Playwright.
+Quando presente, instala Chromium e suas dependências Linux por
+`python -m playwright install --with-deps chromium`. Na main atual esse
+pacote não é exigido, então essa etapa é omitida; testes não são filtrados
+ou ignorados pela CI. Se um commit adicionar testes web sem declarar suas
+dependências, a coleta de testes deve falhar normalmente.
+
+### Resultado e reprodução
+
+Na aba Checks do PR ou Actions do repositório, abra Testes Mini SOC e o job
+Pytest e cobertura. Verde significa que instalação, banco, suíte inteira e
+cobertura mínima foram aprovados. Vermelho indica falha em alguma etapa;
+abra seu log e verifique o teste/etapa indicado. Cancelado pode significar
+que uma nova atualização do mesmo PR substituiu a execução anterior.
+Não há continue-on-error ou supressão do código de saída do pytest.
+
+A cobertura aparece no log de Executar suíte completa. O comando é:
+
+```powershell
+python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70 --tb=no --show-capture=no -q
+```
+
+Execute na pasta backend com o ambiente virtual ativo, dependências daquele
+commit instaladas e seu `.env.test` local apontando somente para
+mini_soc_test, conforme as instruções anteriores. Se o commit incluir
+Playwright, instale Chromium localmente com `python -m playwright install chromium`.
+No Linux, `--with-deps` também instala as bibliotecas do navegador; o runner
+faz essa instalação automaticamente. Não execute o script de preparo da CI
+no seu PostgreSQL local: ele é restrito ao serviço descartável do runner.
+
+Os flags --tb=no e --show-capture=no reduzem a exposição de dados de fixtures
+em falhas, mantendo o nome dos testes reprovados e o código de erro. Para
+investigar localmente, use as instruções de pytest anteriores em ambiente
+controlado, sem publicar senhas, hashes ou cookies em relatórios.
+A meta geral continua 70%; as metas específicas da spec continuam válidas.
+Cobertura Python não mede instruções JavaScript ou conformidade completa do MVP.
+
+### Banco isolado e credenciais
+
+Cada job recebe um serviço oficial postgres:17-bookworm sem volume de dados
+do usuário e com a porta publicada somente em 127.0.0.1 no runner. O único
+banco de aplicação criado é mini_soc_test; bancos internos padrão do
+PostgreSQL não são usados pela suíte. Não há conexão com mini_soc_dev,
+PostgreSQL local, produção ou secrets pessoais.
+
+O entrypoint inicial usa autenticação temporária trust no serviço de loopback
+para permitir o bootstrap sem senha fixa versionada. Antes de executar
+dependências/testes, `.github/scripts/prepare_test_database.py` confirma que
+está em runner GitHub hospedado, valida container/imagem/porta e nome real do
+banco, cria a role mini_soc_app e substitui a autenticação TCP por SCRAM-SHA-256.
+Login TCP de postgres e acesso a outros bancos/roles são recusados. O
+bootstrap administrativo fica acessível somente pelo socket dentro do
+container. O script não aceita host ou banco de outro ambiente.
+
+A role da aplicação tem LOGIN, NOSUPERUSER, NOCREATEDB, NOCREATEROLE,
+NOREPLICATION e NOBYPASSRLS. Como proprietária de mini_soc_test, pode criar
+schemas e tabelas temporárias exigidos pelas fixtures. O job verifica essa
+role e suas permissões usando uma conexão real antes do pytest.
+
+A senha é aleatória por execução e mascarada antes de qualquer uso. O
+arquivo backend/.env.test é criado somente no runner, com permissão 0600,
+e removido após o job; um arquivo preexistente não é sobrescrito pelo
+preparo. As variáveis DB_* do job também apontam exclusivamente para esse
+banco. As fixtures continuam recusando DB_NAME diferente de mini_soc_test
+e confirmando SELECT current_database() antes de criar objetos de teste.
+
+As migrations existentes são executadas pelas fixtures somente em schemas
+aleatórios dentro de transações reversíveis; o workflow não aplica upgrade
+em banco permanente. Os dados/serviço são descartados com o runner. Não há
+upload de dotenv, dumps, coverage bruto, screenshots, traces, vídeos ou
+outros artefatos de teste que possam conter dados sensíveis.
+
+### Permissões e integração
+
+O GITHUB_TOKEN recebe somente contents: read. O checkout não persiste a
+credencial Git, e código de PR roda em pull_request, sem pull_request_target.
+As duas Actions oficiais são fixadas pelo SHA de versões verificadas:
+[checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1) e
+[setup-python v7.1.0](https://github.com/actions/setup-python/releases/tag/v7.1.0).
+A fixação segue a [orientação de segurança do GitHub](https://docs.github.com/en/actions/reference/security/secure-use).
+O job tem limite de 20 minutos e cancela execuções anteriores do mesmo PR/ref.
+
+Esta entrega parte da main e não depende dos PRs #20, #19, #22, #24, #26 ou
+#28. Adicionar CI à main não copia o arquivo automaticamente para branches
+antigas da pilha; depois da integração, será necessário reconciliar essas
+branches/bases para que seus checkouts incluam o workflow, preservando a
+ordem dos PRs. Nenhuma branch de funcionalidade é alterada por esta entrega.
+Tornar o check obrigatório na proteção da main é uma decisão posterior do
+responsável pelo repositório; abrir este PR não modifica essas configurações.
+
+O ambiente local documentado é Windows/Python 3.14.8, com caminhos e ativação
+PowerShell. O runner usa Linux, bash, caminhos POSIX, PostgreSQL em serviço
+Docker e instalação das bibliotecas Chromium via apt. Os comandos Python e
+as guardas do banco são compartilhados. Aprovação local não substitui uma
+execução real no GitHub; o resultado remoto e seu link são registrados no PR.
+
 ## Migrations
 
 O Alembic é utilizado para versionar alterações na estrutura do banco de dados.
