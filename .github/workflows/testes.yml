@@ -1,0 +1,105 @@
+name: Testes Mini SOC
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    name: Pytest e cobertura
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      DB_NAME: mini_soc_test
+      DB_USER: mini_soc_app
+      PYTHONDONTWRITEBYTECODE: '1'
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: mini_soc_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mini_soc_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Obter commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Preparar Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
+      - name: Isolar banco descartável
+        id: database
+        env:
+          CI_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: python .github/scripts/prepare_test_database.py
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install -r backend/requirements-dev.txt
+          python -m pip check
+
+      - name: Verificar conexão restrita
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          with psycopg.connect(
+              host=os.environ['DB_HOST'], port=os.environ['DB_PORT'],
+              dbname=os.environ['DB_NAME'], user=os.environ['DB_USER'],
+              password=os.environ['DB_PASSWORD'], connect_timeout=5,
+          ) as connection:
+              row = connection.execute('''
+                  SELECT current_database(), current_user,
+                         rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls,
+                         has_database_privilege(current_user, current_database(), 'CREATE'),
+                         has_database_privilege(current_user, current_database(), 'TEMP')
+                  FROM pg_roles WHERE rolname = current_user
+              ''').fetchone()
+              assert row == ('mini_soc_test', 'mini_soc_app', False, False, False, False, False, True, True)
+          print('Banco e privilégios de testes confirmados.')
+          PY
+
+      - name: Detectar testes web
+        id: browser
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import importlib.util
+          print('available=' + str(importlib.util.find_spec('playwright') is not None).lower())
+          PY
+
+      - name: Instalar Chromium
+        if: steps.browser.outputs.available == 'true'
+        run: python -m playwright install --with-deps chromium
+
+      - name: Executar suíte completa
+        working-directory: backend
+        run: >-
+          python -m pytest --cov=app --cov-report=term-missing
+          --cov-fail-under=70 --tb=no --show-capture=no -q
+
+      - name: Remover dotenv temporário
+        if: always() && steps.database.outcome == 'success'
+        run: python -c "from pathlib import Path; Path('backend/.env.test').unlink(missing_ok=True)"
