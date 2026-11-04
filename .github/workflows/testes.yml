@@ -62,6 +62,8 @@ jobs:
           python -m pip check
 
       - name: Verificar privacidade PostgreSQL
+        env:
+          CI_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: python .github/scripts/verify_test_logging.py
 
       - name: Verificar conexão restrita
