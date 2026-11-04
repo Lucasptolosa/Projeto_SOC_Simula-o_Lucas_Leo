@@ -64,8 +64,10 @@ marcador nos logs reais do container. A conexão termina e reverte seu estado.
 Depois a role de aplicação conecta exclusivamente a mini_soc_test, confere o
 perfil efetivo, provoca outra CHECK em tabela temporária e verifica a ausência
 do segundo marcador. Se o log não estiver acessível, o controle positivo falha;
-ausência de saída não é tratada como prova de proteção. Logs brutos, marcadores,
-senhas e dados das tabelas não são impressos nem enviados como artefatos.
+ausência de saída não é tratada como prova de proteção. O script publica somente
+o resultado dos controles e mascara os marcadores antes de usá-los, inclusive
+para a eventual impressão automática dos logs do container pelo Actions na
+limpeza. Não faz upload de logs brutos, senhas ou dados como artefatos.
 
 O perfil conserva horário, severidade e mensagem primária, mas perde SQL,
 parâmetros e detalhes úteis à investigação. Mensagens primárias de outros

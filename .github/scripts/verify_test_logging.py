@@ -38,6 +38,7 @@ def verify():
         raise LoggingCheckError("Banco real incorreto.")
     # Controle positivo isolado
     baseline = secrets.token_hex(24)
+    print(f"::add-mask::{baseline}", flush=True)
     sql = f"""
         BEGIN;
         SET LOCAL log_error_verbosity = 'default';
@@ -54,6 +55,7 @@ def verify():
 
     # Perfil real aplicação
     marker = secrets.token_hex(24)
+    print(f"::add-mask::{marker}", flush=True)
     with psycopg.connect(
         host=settings["DB_HOST"], port=settings["DB_PORT"], dbname="mini_soc_test",
         user=settings["DB_USER"], password=os.environ["DB_PASSWORD"], connect_timeout=5,
