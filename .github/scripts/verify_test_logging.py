@@ -1,4 +1,5 @@
 import os
+import re
 import secrets
 import subprocess
 import time
@@ -6,6 +7,10 @@ import time
 import psycopg
 
 from prepare_test_database import LOGGING_PROFILE, docker, validated_service
+
+
+class LoggingCheckError(ValueError):
+    pass
 
 
 def server_logs(container):
@@ -27,9 +32,10 @@ def marker_logged(container, marker):
 def verify():
     container, settings = validated_service()
     psql = ["exec", "-i", "--user", "postgres", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
-            "-U", "postgres", "-d", "mini_soc_test"]
+            "-v", "VERBOSITY=sqlstate", "-U", "postgres", "-d", "mini_soc_test"]
+    print("Serviço descartável validado.", flush=True)
     if docker(*psql, "-tAc", "SELECT current_database()").strip() != "mini_soc_test":
-        raise ValueError("Banco real incorreto.")
+        raise LoggingCheckError("Banco real incorreto.")
     # Controle positivo isolado
     baseline = secrets.token_hex(24)
     sql = f"""
@@ -39,8 +45,11 @@ def verify():
         INSERT INTO ci_log_probe(value) VALUES ('{baseline}');
     """
     result = subprocess.run(["docker", *psql], input=sql, capture_output=True, text=True, timeout=30)
-    if result.returncode != 3 or not marker_logged(container, baseline):
-        raise ValueError("Controle positivo de logging não comprovado.")
+    state = re.search(r"(?:ERROR|FATAL):\s+([0-9A-Z]{5})(?=\s|$)", result.stderr)
+    if result.returncode == 0 or state is None or state[1] != "23514":
+        raise LoggingCheckError(f"Controle SQL inesperado: retorno={result.returncode}, SQLSTATE={state[1] if state else 'ausente'}.")
+    if not marker_logged(container, baseline):
+        raise LoggingCheckError("Controle positivo ausente no log real.")
     print("DEFAULT: marcador sintético encontrado no log do servidor.")
 
     # Perfil real aplicação
@@ -50,27 +59,29 @@ def verify():
         user=settings["DB_USER"], password=os.environ["DB_PASSWORD"], connect_timeout=5,
     ) as connection:
         if connection.execute("SELECT current_database(), current_user").fetchone() != ("mini_soc_test", "mini_soc_app"):
-            raise ValueError("Banco/role fora do ambiente descartável.")
+            raise LoggingCheckError("Banco/role fora do ambiente descartável.")
         profile = dict(connection.execute(
             "SELECT name,setting FROM pg_settings WHERE name = ANY(%s)",
             (list(LOGGING_PROFILE),),
         ).fetchall())
         if profile != LOGGING_PROFILE:
-            raise ValueError("Perfil de logging inesperado.")
+            raise LoggingCheckError("Perfil de logging inesperado.")
         connection.execute("CREATE TEMP TABLE ci_log_probe(value text CHECK (value = ''))")
         try:
             connection.execute("INSERT INTO ci_log_probe(value) VALUES (%s)", (marker,))
         except psycopg.errors.CheckViolation:
             connection.rollback()
         else:
-            raise ValueError("Falha esperada não ocorreu.")
+            raise LoggingCheckError("Falha esperada não ocorreu.")
     if marker_logged(container, marker):
-        raise ValueError("Perfil restrito expôs o marcador.")
+        raise LoggingCheckError("Perfil restrito expôs o marcador.")
     print("TERSE: violação CHECK confirmada sem marcador no log real; parâmetros e statements restritos.")
 
 
 if __name__ == "__main__":
     try:
         verify()
+    except LoggingCheckError as error:
+        raise SystemExit(str(error)) from None
     except Exception as error:
         raise SystemExit(f"Verificação de logging reprovada: {type(error).__name__}; conteúdo omitido.") from None
