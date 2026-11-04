@@ -66,8 +66,19 @@ Asset realmente cadastrado.
 
 #### 3.1.1 Contrato da importação de Logs - Issue #40
 
+**Estado do aceite:** os contratos adicionais abaixo descrevem a implementação
+em revisão. A Issue #40 ainda registra decisões pendentes; não foi localizada
+evidência de confirmação do Spec Owner para Assets inativos, normalização de
+identificadores e campos desconhecidos. A implementação não comprova aprovação.
+
 - `event_id` e `username` são textos não vazios e não compostos somente de
-  whitespace. Não há normalização, truncamento ou limite arbitrário de tamanho.
+  whitespace, sem normalização ou truncamento. NUL e texto não representável
+  em UTF-8 são rejeitados individualmente antes da persistência.
+- **Proposta pendente de aprovação:** nesta branch de correção, `event_id`
+  admite até **1.024 bytes UTF-8**, inclusive. Esse limite técnico ainda não é
+  requisito aprovado pelo Spec Owner. `username` não recebe novo limite.
+  O limite proposto é aplicado por validação e por constraint no banco;
+  excedê-lo produz `invalid_event_id`, preservando os demais itens do lote.
 - `asset_id` é UUID e referencia Asset existente. Logs de Assets `INACTIVE`
   também são aceitos, inclusive eventos históricos. O estado do Asset não é
   alterado pela importação.
