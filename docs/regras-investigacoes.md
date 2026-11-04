@@ -1,133 +1,79 @@
-## Regras de Investigation e False Positive — Issue #33
+# Regras de Investigations
 
-`backend/app/investigations/rules.py` contém um núcleo puro de validação,
-sem banco, dependências externas, entidades ORM, rotas ou emissão de Audit
-Logs. Não importa Detection Engine/Alerts nem o módulo de Incidents.
+O módulo valida início de investigação, descarte como falso positivo e
+elegibilidade para escalonamento conforme RF10, RF11, RF20, RF32,
+RN02 e seção 7 da [spec](../spec.md). As funções são independentes de HTTP,
+persistência e do Detection Engine.
 
-Na preparação, a Issue #12 da Pessoa 2 permanecia aberta e o Alert existente
-em app/detection_engine.py usava status textual. Não foi encontrado AlertStatus
-nas branches remotas verificadas. Esta entrega usa o contrato de valores
-exatos NEW, IN_REVIEW, DISMISSED e ESCALATED, **sem criar outra enumeração
-ou entidade Alert** e sem modificar esse código.
+## Organização e contratos
 
-| Função | Origem exigida | Resultado |
-|---|---|---|
-| validate_start_investigation(current_status, *, actor_role) | NEW | IN_REVIEW. |
-| validate_false_positive(current_status, justification=None, *, actor_role) | IN_REVIEW | DISMISSED, com justificativa textual válida. |
-| validate_escalation_eligibility(current_status, *, actor_role) | IN_REVIEW | None: apenas precondição de escalonamento. |
-
-Todas exigem actor_role com valor ANALYST, sem papel padrão/implícito. ADMIN
-e outros valores são recusados. O futuro serviço deve obter esse papel do
-User autenticado e atualizado no servidor; o parâmetro não deve vir do cliente.
-Essa defesa de domínio não substitui autenticação, User ACTIVE e RBAC da API.
-
-Exemplo a partir da pasta backend:
+- [rules.py](../backend/app/investigations/rules.py): funções públicas e exceção
+  `InvestigationRuleError`.
+- [Testes](../backend/tests/test_investigation_rules.py): casos positivos,
+  negativos, limites e isolamento do domínio, em padrão AAA.
 
 ```python
-from app.investigations.rules import (
-    validate_start_investigation, validate_false_positive,
-    validate_escalation_eligibility,
-)
-
-review = validate_start_investigation("NEW", actor_role="ANALYST")
-dismissed = validate_false_positive(
-    review, "Atividade legítima confirmada.\nEvidência revisada.", actor_role="ANALYST",
-)
-validate_escalation_eligibility("IN_REVIEW", actor_role="ANALYST")
+validate_start_investigation(current_status: str, *, actor_role: str) -> str
+validate_false_positive(
+    current_status: str,
+    justification: str | None = None,
+    *,
+    actor_role: str,
+) -> str
+validate_escalation_eligibility(current_status: str, *, actor_role: str) -> None
 ```
 
-O último exemplo não altera estado nem retorna ESCALATED. Só verifica uma
-precondição; o futuro serviço não poderá persistir esse estado sem criar
-exatamente um Incident associado na mesma transação (RF11). Nenhuma função
-desta entrega oferece uma mudança efetiva para ESCALATED.
+| Função | Estado exigido | Retorno |
+|---|---|---|
+| `validate_start_investigation` | NEW | `"IN_REVIEW"` |
+| `validate_false_positive` | IN_REVIEW | `"DISMISSED"` |
+| `validate_escalation_eligibility` | IN_REVIEW | `None` |
 
-Os valores de estado/papel devem ser strings exatas. StrEnum é compatível
-por ser uma string; se o contrato futuro de Alerts usar outro Enum, o
-adaptador deverá passar seu value textual. Não há coerção de números,
-remoção de espaços ou conversão de caixa dos estados/papéis. Essa fronteira
-permite reutilizar o tipo integrado pela Pessoa 2 sem reconciliar um segundo
-tipo de produção criado por esta Issue.
+Elegibilidade não cria Incident, não modifica Alert e não retorna ESCALATED.
+Essa mudança depende da criação vinculada prevista no RF11.
 
-DISMISSED e ESCALATED são terminais. Repetir o início, descartar NEW,
-reiniciar um Alert encerrado ou tentar uma origem inadequada à decisão
-gera InvestigationRuleError, derivado de ValueError. A interface por ações
-fixa os únicos destinos disponíveis nesta entrega, recusando reversões e
-transições não previstas sem introduzir um workflow genérico.
+## Validações e estados
 
-False Positive exige justificativa str não vazia. Ausência, None, string
-vazia, whitespace ASCII/Unicode e tipos não textuais são recusados. strip()
-é usado somente para testar se há conteúdo: o texto original não é
-reescrito, truncado ou armazenado. Um caractere textual, acentos, múltiplas
-linhas e espaços ao redor são aceitos. Não foi criado limite máximo ausente
-da spec; caracteres que Python não considera whitespace não recebem política
-adicional nesta entrega.
+Todas as funções exigem `actor_role="ANALYST"`. ADMIN e outros valores são
+recusados. A verificação de papel ocorre antes da validação do estado.
 
-Mensagens de erro são fixas, sem repetir estado, papel, justificativa ou
-observações recebidos. A autorização do papel é verificada antes do estado.
-As funções não recebem uma entidade para modificar e não registram logs;
-retornar um destino válido ainda não aplica qualquer mudança ao Alert.
+Estados conhecidos são NEW, IN_REVIEW, DISMISSED e ESCALATED, com grafia exata,
+sem conversão de caixa, remoção de espaços ou coerção de tipos. Como `StrEnum`
+é string, pode ser usado diretamente; outros enums precisam de adaptação
+explícita para seu valor textual. DISMISSED e ESCALATED são terminais.
 
-### Integração futura
+Falso positivo exige justificativa do tipo string, não vazia e não composta
+somente por whitespace reconhecido por `str.strip()`. A validação de
+preenchimento não transforma nem armazena o texto. O módulo não define um
+limite máximo de tamanho.
 
-Quando a persistência de Alerts for integrada, o serviço deverá:
+## Erros, segurança e integração
 
-1. Autenticar o User e verificar estado ACTIVE.
-2. Autorizar somente ANALYST usando get_current_user/require_roles, sem
-   herança implícita de permissões para ADMIN.
-3. Recuperar o Alert no PostgreSQL dentro da Session/transação apropriada,
-   definindo o controle de concorrência antes de aceitar gravações.
-4. Validar o estado atual e a decisão com as funções deste módulo, usando
-   o papel obtido do servidor.
-5. Registrar a Investigation ou a justificativa original validada.
-6. Armazenar analista e horário da operação.
-7. Aplicar o destino retornado quando permitido. Escalonamento exige também
-   criar exatamente um Incident associado, sem gravação isolada de ESCALATED.
-8. Acrescentar a auditoria exigida pelo fluxo na mesma Session.
-9. Confirmar tudo atomicamente; falhas deverão reverter todas as gravações.
+Violações lançam `InvestigationRuleError`, subclasse de `ValueError`, com
+mensagens fixas e sem eco dos valores. Não há logging, I/O, alteração de
+objetos ou acesso ao banco. O módulo não autentica usuários e não confere
+estado ACTIVE ou expiração de sessão.
 
-Autenticação/RBAC estão na main remota e auditoria nas branches administrativas;
-esta base empilhada não precisa importá-los. append_audit adiciona eventos
-à Session sem commit próprio, mas o AuditLog atual tem old_role/new_role
-específicos de papéis. RF15.2 precisará representar os estados anterior/novo
-de Alert em uma futura integração, sem reutilizar esses campos para status.
-RF15.2 exige eventos para descarte/escalonamento bem-sucedidos; esta Issue
-não amplia a política de auditoria nem grava eventos por conta própria.
+O serviço consumidor deve usar identidade e papel obtidos no servidor,
+validar a sessão e consultar o estado atual do Alert com controle de
+concorrência. Não se deve aceitar `actor_role` como autorização fornecida
+pelo cliente. Os estados retornados são resultados de validação, não prova
+de persistência.
 
-| Referência | Entrega e limite |
-|---|---|
-| RF10 | Validação de NEW -> IN_REVIEW; observações, analista, horário e persistência pendentes. |
-| RF20 | Validação de IN_REVIEW -> DISMISSED e justificativa; armazenamento/fluxo persistido pendentes. |
-| RF32 / seção 7 | Erro de domínio e dados preservados; resposta HTTP/rollback do serviço pendentes. |
-| RN02 | Exige papel ANALYST no núcleo; autenticação e papel confiável dependem da futura camada de servidor. |
-| RF11 | Somente elegibilidade em IN_REVIEW; criação de Incident e mudança atômica para ESCALATED não implementadas. |
-| RF15.2 | Auditoria persistida não implementada. |
+As operações persistentes precisam vincular analista, data/hora e observações
+à Investigation e conservar evidências. Escalonamento deve criar exatamente
+um Incident vinculado e alterar o Alert na mesma transação. A auditoria deve
+atender RF15.2 e RN04; os campos de mudança de papel de User não substituem
+o registro de mudanças de Status. A abertura de Incident não é responsabilidade
+de `validate_escalation_eligibility`.
 
-### Testes e cobertura
+## Testes
 
-Os testes em tests/test_investigation_rules.py seguem AAA e não solicitam
-fixtures de PostgreSQL. Cobrem estados válidos/terminais, repetição/reversões,
-papéis/status inválidos, omissão de papel, justificativa ausente/vazia/
-whitespace/não textual, textos preservados, StrEnum, sigilo de erros e ausência
-de mutação. Um subprocesso Python isolado (-I -S), sem pacotes externos e
-com acesso a arquivos/rede bloqueado após importação, executa as três funções.
-
-Validação local: **178 testes aprovados** (112 novos e 66 anteriores),
-**97,64% de cobertura geral** e **100% no módulo de regras**. A execução
-isolada dos 112 testes também atingiu 100% de linhas e ramificações.
-
-Na pasta backend:
+Com dependências instaladas, a partir de `backend/`:
 
 ```powershell
 python -m pytest tests/test_investigation_rules.py --cov=app.investigations.rules --cov-branch --cov-report=term-missing --cov-fail-under=80 -q
-python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70 -q
-python -m coverage report --include=app/investigations/rules.py --fail-under=80
 ```
 
-A CI desta branch exige também 80% específico, mantendo os 70% gerais e todos
-os testes anteriores intactos. As integrações anteriores continuam restritas
-a mini_soc_test, com schemas isolados e rollback. Esta entrega usa
-feat/regras-investigacoes sobre ci/testes-automatizados enquanto #30 estiver
-aberto, independentemente do PR #32. Não modifica spec/ADR, dependências,
-Assets, Logs, Detection Rules, Alerts ou PRs anteriores. A futura integração
-transacional permanece condicionada ao contrato persistido da Pessoa 2.
-
+Esses testes não precisam de PostgreSQL. Para a suíte completa e metas de
+cobertura geral e por módulo, utilize o [README](../README.md#testes-automatizados).

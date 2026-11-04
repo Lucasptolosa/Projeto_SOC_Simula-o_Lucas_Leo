@@ -34,7 +34,8 @@ Log → Detection Rule → Alert → Investigation
 - **User:** identificador, nome de usuário único, papel (`ANALYST` ou `ADMIN`), estado (`ACTIVE` ou `INACTIVE`) e hash de senha.
 - **Asset:** identificador, nome, tipo (`SERVER`, `WORKSTATION` ou `APPLICATION`) e estado (`ACTIVE` ou `INACTIVE`).
 - **Log:** `event_id` único, `asset_id`, `occurred_at` com fuso horário, `event_type` e `username`.
-- **Detection Rule:** identificador, tipo de regra predefinido (`DR01`, `DR02` ou `DR03`), estado (`ACTIVE` ou `INACTIVE`) e Severity fixa associada ao tipo.- **Alert:** identificador, regra de origem, Log(s) que fundamentam a detecção, Asset, Severity, data/hora e Status.
+- **Detection Rule:** identificador, tipo de regra predefinido (`DR01`, `DR02` ou `DR03`), estado (`ACTIVE` ou `INACTIVE`) e Severity fixa associada ao tipo.
+- **Alert:** identificador, regra de origem, Log(s) que fundamentam a detecção, Asset, Severity, data/hora e Status.
 - **Investigation / Evidence:** Alert associado, analista, observação textual e data/hora do registro.
 - **Incident:** identificador, Alert de origem, analista responsável, Status, Severity herdada do Alert, data/hora de abertura e conclusão textual de resolução quando aplicável.
 - **Audit Log:** identificador, usuário, ação, entidade afetada e data/hora.
@@ -64,19 +65,13 @@ Os campos são obrigatórios. `event_id` deve ser único; `asset_id` deve refere
 O UUID do exemplo é ilustrativo e deve ser substituído pelo identificador de um
 Asset realmente cadastrado.
 
-#### 3.1.1 Contrato da importação de Logs - Issue #40
-
-**Estado do aceite:** as quatro decisões foram aprovadas pelos dois integrantes,
-conforme confirmação explícita do usuário no chat do Codex em 2026-11-04:
-limite de `event_id` em bytes UTF-8, aceitação de Assets `INACTIVE`, preservação
-dos textos sem normalização/truncamento e rejeição individual de campos
-desconhecidos. Esse aceite não substitui a revisão técnica nem autoriza merges.
+#### 3.1.1 Contratos de importação de Logs
 
 - `event_id` e `username` são textos não vazios e não compostos somente de
   whitespace, sem normalização ou truncamento. NUL e texto não representável
   em UTF-8 são rejeitados individualmente antes da persistência.
 - `event_id` admite até **1.024 bytes UTF-8**, inclusive. `username` não recebe
-  novo limite. O limite aprovado é aplicado por validação e por constraint no banco;
+  novo limite. O limite é aplicado por validação e por constraint no banco;
   excedê-lo produz `invalid_event_id`, preservando os demais itens do lote.
 - `asset_id` é UUID e referencia Asset existente. Logs de Assets `INACTIVE`
   também são aceitos, inclusive eventos históricos. O estado do Asset não é
@@ -90,7 +85,7 @@ desconhecidos. Esse aceite não substitui a revisão técnica nem autoriza merge
   esse identificador é aceito; repetições são rejeitadas sem substituir o original.
 - O conteúdo do arquivo JSON é enviado no corpo de `POST /logs/import` com
   `Content-Type: application/json`, como lista de 1 a 1.000 itens. Não há upload
-  multipart nesta entrega. A operação é exclusiva de ADMIN autenticado e ativo,
+  multipart. A operação é exclusiva de ADMIN autenticado e ativo,
   com as proteções existentes de Origin e CSRF.
 - Um lote processado retorna HTTP 200, inclusive quando todos os itens forem
   rejeitados. A resposta contém `accepted`, `rejected` e `rejections`, com
@@ -107,16 +102,17 @@ desconhecidos. Esse aceite não substitui a revisão técnica nem autoriza merge
 - Logs já persistidos são preservados após desativação do Asset. A relação
   referencial bloqueia exclusão que destruiria esse histórico.
 
-Nesta entrega, aceitação significa validação e persistência, não execução de
-Detection Rules. RF07/RF08 e a continuidade/ordenação de detecção da seção 8.2
-continuam exigidos na integração futura do motor. A camada de ingestão não
-rejeita um evento válido por ser anterior a outro já importado. Consulta de
-Logs (RF27), interface, auditoria adicional de importação e política de
-reprocessamento de detecção não são adicionadas pela Issue #40.
+A aceitação na importação significa validação e persistência. A avaliação
+de Detection Rules deve atender RF07/RF08 e à continuidade e ordenação da
+seção 8.2. A camada de ingestão não rejeita um evento válido por ser anterior
+a outro já importado. A operação de importação não fornece consulta de Logs
+(RF27), interface, auditoria adicional de importação ou política de
+reprocessamento de detecção. Esses limites da importação não eliminam RF07,
+RF08 ou RF27.
 
 ### 3.2 Contratos de gerenciamento de Assets
 
-Detalhamento dos RF04, RF05 e RF29 alinhado na Issue #38:
+Os contratos de gerenciamento de Assets detalham RF04, RF05 e RF29:
 
 - O identificador de Asset é UUID gerado pelo servidor. Nome não é único;
   Assets distintos podem possuir o mesmo nome. Não há normalização automática
@@ -130,15 +126,15 @@ Detalhamento dos RF04, RF05 e RF29 alinhado na Issue #38:
   Uma solicitação de alteração sem campos é inválida.
 - A desativação altera `ACTIVE` para `INACTIVE`. Se o Asset já estiver
   `INACTIVE`, retorna seu estado atual sem nova alteração nem novo Audit Log.
-- Não há exclusão física nem operação de reativação nesta entrega.
+- Não há exclusão física nem operação de reativação no gerenciamento de Assets.
 - Mutações reais bem-sucedidas devem gerar o Audit Log previsto no RF15.1,
   na mesma transação da alteração do Asset. Falha em uma das gravações deve
   reverter ambas. Uma repetição sem mutação não cria auditoria de alteração.
 
-Esses contratos não definem política de importação para Asset inativo nem
-significam que Logs/Alerts já estejam persistidos ou integrados.
+A importação de Logs de Assets inativos segue a seção 3.1.1. As operações de
+gerenciamento não executam detecção nem geram Alerts.
 
-As operações HTTP da entrega #38 são exclusivas de Administrator autenticado,
+As operações HTTP de gerenciamento são exclusivas de Administrator autenticado,
 reutilizando as verificações existentes de Origin e CSRF nas escritas:
 
 | Operação | Entrada | Resposta de sucesso |
@@ -339,7 +335,7 @@ A transição para `CONTAINED` deve atender ao RF33. As transições para `RESOL
 - Toda mudança relevante começa em Issue, segue para branch específica e é entregue por Pull Request revisado pelo outro integrante.
 - **Quando uma mudança de código altera comportamento documentado, atualizar `spec.md`, código e testes no mesmo commit lógico.**
 - Ambas as pessoas precisam ser autoras de commits reais em suas respectivas funcionalidades.
-- Decisões arquiteturais relevantes devem ser documentadas em ADR; `plan.md`, `tasks.md` e `README.md` devem permanecer coerentes com o repositório.
+- Decisões arquiteturais relevantes devem ser documentadas em ADR; a documentação técnica e o `README.md` devem permanecer coerentes com o repositório.
 - Não registrar credenciais, tokens nem dados sensíveis no Git ou nos Logs.
 
 ## 11. Critérios de qualidade, validação e entrega
