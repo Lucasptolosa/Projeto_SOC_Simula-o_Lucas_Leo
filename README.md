@@ -2,6 +2,14 @@
 
 ## Importação de Logs - Issue #40
 
+**Contratos aprovados:** os dois integrantes aprovaram as quatro decisões da
+Issue #40, conforme confirmação explícita do usuário no chat do Codex em
+2026-11-04. A correção em `fix/validacao-importacao-logs` aplica o limite de
+`event_id` de até **1.024 bytes UTF-8** e continua sujeita à revisão técnica.
+NUL é rejeitado individualmente em `event_id` e `username`, sem HTTP 500 ou
+perda dos demais registros válidos. Identificadores válidos são preservados.
+Veja [contratos, logging e limites da correção](docs/correcao-importacao-logs.md).
+
 `POST /logs/import` recebe o conteúdo de um arquivo JSON no corpo
 `application/json`: lista de 1 a 1.000 itens. Não há multipart, tela ou dependência
 nova de upload. É uma escrita exclusiva de ADMIN ativo, com sessão, Origin e
@@ -65,7 +73,7 @@ Não altera tabelas anteriores. Downgrade destrutivo permanece bloqueado.
 | RNF09 | Respostas e logging sanitizados sem payloads privados. |
 | RNF03, parcial | Leitura e integridade no PostgreSQL entre sessões; recuperação após reinício do MVP não comprovada. |
 
-Os contratos aprovados da Issue #40 estão na seção 3.1.1 da spec. A ingestão
+Os quatro contratos aprovados da Issue #40 estão na seção 3.1.1 da spec. A ingestão
 aceita eventos históricos; a regra de ordem da seção 8.2 pertence à futura
 avaliação do motor. Aceito nesta resposta não significa processado por Detection
 Rules. Não se afirma RF07/RF08, RNF06 ou o fluxo completo de RF22 concluídos.

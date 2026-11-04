@@ -66,8 +66,18 @@ Asset realmente cadastrado.
 
 #### 3.1.1 Contrato da importação de Logs - Issue #40
 
+**Estado do aceite:** as quatro decisões foram aprovadas pelos dois integrantes,
+conforme confirmação explícita do usuário no chat do Codex em 2026-11-04:
+limite de `event_id` em bytes UTF-8, aceitação de Assets `INACTIVE`, preservação
+dos textos sem normalização/truncamento e rejeição individual de campos
+desconhecidos. Esse aceite não substitui a revisão técnica nem autoriza merges.
+
 - `event_id` e `username` são textos não vazios e não compostos somente de
-  whitespace. Não há normalização, truncamento ou limite arbitrário de tamanho.
+  whitespace, sem normalização ou truncamento. NUL e texto não representável
+  em UTF-8 são rejeitados individualmente antes da persistência.
+- `event_id` admite até **1.024 bytes UTF-8**, inclusive. `username` não recebe
+  novo limite. O limite aprovado é aplicado por validação e por constraint no banco;
+  excedê-lo produz `invalid_event_id`, preservando os demais itens do lote.
 - `asset_id` é UUID e referencia Asset existente. Logs de Assets `INACTIVE`
   também são aceitos, inclusive eventos históricos. O estado do Asset não é
   alterado pela importação.

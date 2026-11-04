@@ -8,6 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
+# Contrato aprovado
+EVENT_ID_MAX_BYTES = 1024
+
+
 class EventType(StrEnum):
     AUTH_FAILURE = "AUTH_FAILURE"
     AUTH_SUCCESS = "AUTH_SUCCESS"
@@ -18,6 +22,7 @@ class LogRecord(Base):
     __tablename__ = "logs"
     __table_args__ = (
         CheckConstraint("event_id ~ '[^[:space:]]'", name="ck_logs_event_id_nonempty"),
+        CheckConstraint(f"octet_length(convert_to(event_id, 'UTF8')) <= {EVENT_ID_MAX_BYTES}", name="ck_logs_event_id_bytes"),
         CheckConstraint("username ~ '[^[:space:]]'", name="ck_logs_username_nonempty"),
     )
 

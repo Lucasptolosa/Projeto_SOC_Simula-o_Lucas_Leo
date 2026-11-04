@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
-from app.logs.models import EventType
+from app.logs.models import EVENT_ID_MAX_BYTES, EventType
 
 
 class LogInput(BaseModel):
@@ -18,8 +18,19 @@ class LogInput(BaseModel):
     @field_validator("event_id", "username")
     @classmethod
     def nonempty_text(cls, value: str) -> str:
-        if not value.strip():
+        if not value.strip() or "\x00" in value:
             raise ValueError("Campo textual obrigatório.")
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            raise ValueError("Texto UTF-8 inválido.") from None
+        return value
+
+    @field_validator("event_id")
+    @classmethod
+    def bounded_identifier(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > EVENT_ID_MAX_BYTES:
+            raise ValueError("Identificador excede o limite permitido.")
         return value
 
     @field_validator("occurred_at", mode="before")

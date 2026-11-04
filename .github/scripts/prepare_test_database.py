@@ -7,6 +7,16 @@ import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[2]
+LOGGING_PROFILE = {
+    "log_error_verbosity": "terse",
+    "log_min_error_statement": "panic",
+    "log_statement": "none",
+    "log_parameter_max_length": "0",
+    "log_parameter_max_length_on_error": "0",
+    "log_min_duration_statement": "-1",
+    "log_min_duration_sample": "-1",
+    "log_transaction_sample_rate": "0",
+}
 
 
 def docker(*arguments, input=None):
@@ -16,7 +26,7 @@ def docker(*arguments, input=None):
     ).stdout
 
 
-def prepare():
+def validated_service():
     # Somente runner hospedado
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted":
         raise ValueError("Preparação permitida somente no runner hospedado.")
@@ -26,15 +36,20 @@ def prepare():
     settings = {"DB_HOST": "127.0.0.1", "DB_PORT": "5432", "DB_NAME": "mini_soc_test", "DB_USER": "mini_soc_app"}
     if any(os.environ.get(key) != value for key, value in settings.items()):
         raise ValueError("Configuração fora do serviço de testes.")
-    target = ROOT / "backend" / ".env.test"
-    if target.exists():
-        raise ValueError("O dotenv de testes já existe.")
     service = json.loads(docker("inspect", container))[0]
     bindings = service["NetworkSettings"]["Ports"]["5432/tcp"]
     if service["Config"]["Image"] != "postgres:17-bookworm" or not service["State"]["Running"]:
         raise ValueError("Imagem/estado do serviço inválido.")
     if bindings != [{"HostIp": "127.0.0.1", "HostPort": "5432"}]:
         raise ValueError("Serviço deve estar restrito ao loopback.")
+    return container, settings
+
+
+def prepare():
+    container, settings = validated_service()
+    target = ROOT / "backend" / ".env.test"
+    if target.exists():
+        raise ValueError("O dotenv de testes já existe.")
 
     password = secrets.token_hex(32)
     print(f"::add-mask::{password}", flush=True)
@@ -45,6 +60,11 @@ def prepare():
         ALTER DATABASE mini_soc_test OWNER TO mini_soc_app;
         REVOKE ALL ON DATABASE mini_soc_test FROM PUBLIC;
     """
+    # Somente banco descartável
+    sql += "".join(
+        f"ALTER DATABASE mini_soc_test SET {name} = '{value}';\n"
+        for name, value in LOGGING_PROFILE.items()
+    )
     psql = ["exec", "-i", "--user", "postgres", container, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "mini_soc_test"]
     database = docker(*psql, "-tAc", "SELECT current_database()")
     if database.strip() != "mini_soc_test":
