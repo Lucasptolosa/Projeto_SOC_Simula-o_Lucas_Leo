@@ -107,3 +107,7 @@ jobs:
       - name: Remover dotenv temporário
         if: always() && steps.database.outcome == 'success'
         run: python -c "from pathlib import Path; Path('backend/.env.test').unlink(missing_ok=True)"
+
+      - name: Verificar cobertura de Investigation
+        working-directory: backend
+        run: python -m coverage report --include=app/investigations/rules.py --fail-under=80
