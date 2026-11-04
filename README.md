@@ -299,6 +299,8 @@ nem pelas migrations e não garante sigilo de todo erro.
 
 ## Referências técnicas
 
+- [Constituição — princípios de engenharia](constitution.md).
+- [Orientações para agentes](AGENTS.md).
 - [Especificação funcional e requisitos](spec.md).
 - [Arquitetura dos componentes](docs/arquitetura-aplicacao.md).
 - [ADR-001 — Arquitetura técnica](docs/adr/01-arquitetura-inicial.md).
