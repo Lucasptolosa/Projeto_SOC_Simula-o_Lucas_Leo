@@ -40,6 +40,9 @@ def import_logs(
         if result.rejected:
             logger.warning("timestamp=%s operation=/logs/import category=RecordRejected rejected=%s",
                            datetime.now(timezone.utc).isoformat(), result.rejected)
+        if result.detection.rejected:
+            logger.warning("timestamp=%s operation=/logs/import category=DetectionRejected rejected=%s",
+                           datetime.now(timezone.utc).isoformat(), result.detection.rejected)
         return result
     except service.LogImportError as error:
         db.rollback()

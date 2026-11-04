@@ -1,5 +1,81 @@
 # Mini SOC
 
+## Integração do Detection Engine - Issue #47
+
+`POST /logs/import` agora avalia os novos Logs persistidos com o motor DR01-DR03
+existente. Não há alteração dos algoritmos, janelas ou Severities. O serviço
+restaura estado do PostgreSQL e grava Logs, Alerts, evidências e estado atualizado
+na mesma transação; o router confirma uma única vez. Falhas revertem o conjunto.
+
+`accepted/rejected/rejections` continuam descrevendo a ingestão. O novo bloco
+`detection` informa avaliação e rejeições fora de ordem separadamente:
+
+```json
+{
+  "accepted": 2,
+  "rejected": 0,
+  "rejections": [],
+  "detection": {
+    "evaluated": 1,
+    "rejected": 1,
+    "rejections": [
+      {"position": 2, "reason": "out_of_order", "detail": "Evento fora de ordem para detecção."}
+    ],
+    "alerts_created": 0
+  }
+}
+```
+
+O Log rejeitado para detecção permanece armazenado. Posições são da entrada
+original, a partir de 1; a avaliação ordena por occurred_at e event_id. Duplicatas
+e itens inválidos não entram no motor. Um Alert usa UUID, Status NEW, instante do
+evento acionador e evidências ordenadas protegidas por FKs RESTRICT. Contagens
+não disponibilizam consulta de Alerts ao ADMIN; a matriz de permissões continua.
+
+A migration `0006_detection_persistence`, após `0005_create_logs`, acrescenta
+`detection_rules`, `detection_state`, `alerts` e `alert_logs`. Não altera migrations
+anteriores nem processa Logs históricos. As três regras começam ACTIVE, com
+Severity fixa. O estado interno JSONB é versionado e a linha singleton é bloqueada
+antes da ingestão, coordenando também diferentes processos. Não há cache global
+de estado nem reset silencioso se o catálogo/snapshot estiver inconsistente.
+
+Aplicar a migration pelo procedimento Alembic existente antes de servir a nova
+versão. Não executar downgrade destrutivo nem excluir histórico para reaplicar.
+Logs importados antes dessa migration não iniciam sequências automaticamente;
+reenviá-los é duplicação. Operações de recuperação/backup devem preservar todas
+as tabelas do mesmo ponto confirmado.
+
+Rastreabilidade: RF07/RF08/RF09 (avaliação e geração), RF22 (reenvio sem Alert),
+RF23 (estado persistido de regras), RF24 (histórico preservado), RNF03 (continuidade
+da detecção após reinício da aplicação), RNF09 (erros sem payload) e seções
+8/8.1/8.2 (limites, sequências e ordenação). Consulte os contratos na
+[spec 3.1.2](spec.md#312-integração-da-importação-com-detection-engine---issue-47)
+e a proposta [ADR-003](docs/adr/03-estado-transacional-detection-engine.md).
+
+Os testes `test_detection_persistence.py` e `test_detection_transactions.py`
+cobrem persistência/evidências, limites temporais, ordem, regras inativas,
+rollback após geração, falha de commit, duas conexões de administradores
+distintos e três processos reais da aplicação continuando a mesma sequência.
+A migration é testada também sobre Logs já existentes, sem backfill. Usam
+somente mini_soc_test, schemas exclusivos e infraestrutura de testes existente.
+
+Validação final sobre a main `641623b`: 794 casos aprovados em 212,51 s na suíte
+completa, usando pasta temporária exclusiva no workspace. Cobertura: 99,34% geral,
+100% de linhas em `app.detection` e Logs, 97,78% no motor e 100% nos domínios
+Incidents/Investigations. São 26 casos novos; nenhuma regressão removida.
+Python 3.14.10, PostgreSQL 17.11 separado e Chromium real. AAA/comentários de
+até três palavras e compatibilidade das 42 dependências conferidos.
+Isso é evidência local, não substitui CI nem revisão da Pessoa 1.
+
+Pendentes: API de ativação/desativação e auditoria de Rules (RF18/RF15.1), consulta
+e gestão de Alerts (#12), consulta de Logs (RF27), integração persistente de
+Investigation/Incident, Dashboard, reprocessamento e medições RNF05/RNF06.
+O bloqueio global e o crescimento do snapshot são limites conhecidos do MVP,
+registrados no ADR-003 proposto; não se declara desempenho verificado.
+
+As evidências abaixo referentes às issues anteriores descrevem suas respectivas
+entregas. Seu escopo original não substitui o estado da integração descrito aqui.
+
 ## Importação de Logs - Issue #40
 
 **Contratos aprovados:** os dois integrantes aprovaram as quatro decisões da
@@ -13,7 +89,7 @@ Veja [contratos, logging e limites da correção](docs/correcao-importacao-logs.
 `POST /logs/import` recebe o conteúdo de um arquivo JSON no corpo
 `application/json`: lista de 1 a 1.000 itens. Não há multipart, tela ou dependência
 nova de upload. É uma escrita exclusiva de ADMIN ativo, com sessão, Origin e
-CSRF existentes. Logs persistidos não são avaliados pelo motor nesta entrega.
+CSRF existentes. A avaliação foi acrescentada pela Issue #47, descrita acima.
 
 Cada item exige event_id, asset_id, occurred_at, event_type e username. Asset é
 referenciado pelo UUID existente, inclusive se estiver INACTIVE. Os tipos são
@@ -67,16 +143,16 @@ Não altera tabelas anteriores. Downgrade destrutivo permanece bloqueado.
 |---|---|
 | RF06 / seção 3.1 | Validação e persistência individual com Asset existente e offset explícito. |
 | RF21 | Rejeição parcial, contagens após commit e razões por posição original. |
-| RF22, persistência | Unicidade real inclusive concorrente; nenhuma substituição do original. Integração com Alerts ainda pendente. |
+| RF22 | Unicidade real inclusive concorrente; nenhuma substituição do original nem geração por reenvio na integração #47. |
 | RF03/RNF02 | ADMIN autenticado/ativo, autorização no servidor e Origin/CSRF existentes. |
 | RF05/RN05 | Asset inativo e histórico aceitos/preservados; FK impede exclusão destrutiva do Asset. |
 | RNF09 | Respostas e logging sanitizados sem payloads privados. |
 | RNF03, parcial | Leitura e integridade no PostgreSQL entre sessões; recuperação após reinício do MVP não comprovada. |
 
 Os quatro contratos aprovados da Issue #40 estão na seção 3.1.1 da spec. A ingestão
-aceita eventos históricos; a regra de ordem da seção 8.2 pertence à futura
-avaliação do motor. Aceito nesta resposta não significa processado por Detection
-Rules. Não se afirma RF07/RF08, RNF06 ou o fluxo completo de RF22 concluídos.
+aceita eventos históricos; a regra de ordem da seção 8.2 é aplicada na avaliação
+do motor pela #47. Aceito na ingestão não significa aceito para detecção.
+RNF06 continua exigindo medição própria no ambiente de referência.
 
 Dentro de backend, com `.env.test` exclusivamente para mini_soc_test:
 
@@ -105,9 +181,9 @@ sem privilégios administrativos. O conteúdo Python final do clone foi conferid
 contra o snapshot testado. Nenhuma configuração/credencial de desenvolvimento
 foi usada. Resultados locais não significam aprovação de CI remoto ou revisão.
 
-Fora do escopo: consulta/filtros de Logs (RF27), interface web, estado durável do
-motor, persistência de Rules/Alerts, Dashboard e processamento retrospectivo de
-detecções. Essas funcionalidades continuam para entregas futuras.
+Fora do escopo original da #40: consulta/filtros de Logs (RF27), interface web,
+estado durável do motor e persistência de Rules/Alerts. Estes dois últimos são
+acrescentados pela #47. Dashboard e processamento retrospectivo continuam futuros.
 
 ## Assets - Issue #38
 
@@ -188,8 +264,8 @@ rollback. Não compartilhar credenciais ou usar mini_soc_dev nos testes.
 
 Permanecem fora desta entrega: importação de Logs, ingestão em Asset inativo,
 persistência/consulta de Alerts, Dashboard e teste de desempenho do MVP.
-Logs/Alerts ainda não têm modelos persistentes: não se afirma que a preservação
-de suas associações com Asset já tenha sido testada.
+Na entrega atual, Logs (#40) e Alerts (#47) possuem modelos persistentes e
+proteção referencial; as evidências originais da #38 eram limitadas a Assets.
 
 Sistema acadêmico de monitoramento de segurança, desenvolvido para receber logs simulados, aplicar regras de detecção, gerar alertas e permitir a investigação e o tratamento de incidentes.
 

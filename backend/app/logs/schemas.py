@@ -49,7 +49,15 @@ class RejectedLog(BaseModel):
     detail: str
 
 
+class DetectionSummary(BaseModel):
+    evaluated: int
+    rejected: int
+    rejections: list[RejectedLog]
+    alerts_created: int
+
+
 class ImportSummary(BaseModel):
     accepted: int
     rejected: int
     rejections: list[RejectedLog]
+    detection: DetectionSummary
