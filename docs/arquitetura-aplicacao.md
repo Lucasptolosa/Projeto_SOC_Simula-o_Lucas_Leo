@@ -25,7 +25,9 @@ não confirmam isoladamente partes de uma operação de negócio. A conexão usa
 READ COMMITTED, `pool_pre_ping`, timeout e ocultação de parâmetros SQL.
 
 As [migrations](../backend/migrations/versions) formam uma cadeia única:
-Users → sessões → Audit Logs → Assets → Logs. Os modelos são carregados pelo
+Users → sessões → Audit Logs → Assets → Logs → persistência de detecção.
+A revisão `0006_detection_persistence` acrescenta catálogo, estado, Alerts e
+evidências. Os modelos são carregados pelo
 [ambiente Alembic](../backend/migrations/env.py) para compor a metadata comum.
 Papéis, estados e tipos são textos com constraints, sem enums nativos do
 PostgreSQL. Regras de domínio sem ORM não criam tabelas.
@@ -120,11 +122,14 @@ do Log original. Rejeições previstas preservam os demais registros válidos;
 falha operacional reverte o lote inteiro. A resposta de sucesso só é enviada
 após commit.
 
-Importação não consulta regras nem cria Alerts. O modelo ORM `LogRecord` e o
-objeto de domínio `Log` do Detection Engine têm responsabilidades distintas;
-o fluxo persistente de detecção precisa coordenar essa conversão, ordenação,
-continuidade e gravação de resultados conforme RF07/RF08 e seção 8.2.
-Uma rejeição do motor por ordem temporal não altera o contrato de ingestão.
+Após inserir os Logs novos, o serviço chama a integração de detecção. O modelo
+ORM `LogRecord` e o objeto de domínio `Log` têm responsabilidades distintas;
+o adaptador converte os registros inseridos para avaliação, sem duplicar a
+entidade persistente. Itens inválidos ou duplicados não entram no motor.
+Uma rejeição temporal de detecção preserva o Log válido e não altera as
+contagens de ingestão. O bloco `detection` da resposta distingue avaliação,
+rejeições por posição original e quantidade de Alerts criados conforme a
+seção 3.1.2 da spec.
 
 Para validar os contratos de ingestão, a partir de `backend/`, com o banco de
 testes configurado exclusivamente como `mini_soc_test`:
@@ -141,9 +146,9 @@ constraint real, unicidade entre conexões, commit, rollback e autorização.
 O [Detection Engine](../backend/app/detection_engine.py) é Python em memória,
 com `Log`, `DetectionRule`, `Alert` e `ProcessingResult`. Ordena cada lote por
 data/hora e identificador, acompanha o último instante por Asset/username e
-deduplica eventos e sequências. Instâncias e seu estado precisam ser
-controlados pelo serviço consumidor; não há cursor durável ou garantia de
-idempotência entre processos.
+deduplica eventos e sequências. O núcleo não acessa banco ou HTTP. A integração
+persistente restaura uma instância por transação para conservar o estado
+confirmado entre lotes e reinícios, sem compartilhar uma instância global.
 
 DR01, DR02 e DR03 mantêm os parâmetros da spec. O histórico de falhas continua
 sendo acompanhado com regras inativas. AUTH_SUCCESS encerra a sequência da
@@ -151,6 +156,48 @@ DR02 mesmo inativa, mas não encerra por si só a sequência da DR01. Registro
 interno de avaliadores não permite cadastrar novos tipos pela aplicação.
 O [ADR-002](adr/02-extensao-detection-rules.md) descreve esse mecanismo e mantém
 seu estado formal de proposta.
+
+### Catálogo, estado e Alerts
+
+O módulo `backend/app/detection/` contém:
+
+- [models.py](../backend/app/detection/models.py): `DetectionRuleRecord`,
+  `DetectionState`, `AlertRecord` e `AlertLog`, na Base compartilhada.
+- [state.py](../backend/app/detection/state.py): serialização JSONB versionada
+  do histórico, deduplicação, último instante por conta/Asset e contador interno.
+- [repository.py](../backend/app/detection/repository.py): locks, catálogo,
+  gravação dos Alerts/evidências e atualização do estado.
+- [service.py](../backend/app/detection/service.py): adaptação de Logs, avaliação,
+  persistência de resultados e resumo público de detecção.
+
+A linha `detection_state` de identificador 1 é bloqueada com `FOR UPDATE` antes
+da inserção de Logs. A ordem de locks é autor, estado, Assets e catálogo ordenado
+por identificador. Cada lote restaura o último estado confirmado em READ
+COMMITTED e lê o catálogo persistido. Estado ausente, versão inválida ou catálogo
+incompleto abortam a operação; não há reset silencioso.
+
+O lote que obtém primeiro o lock define a precedência entre requisições. Dentro
+do lote, o motor ordena `occurred_at` e `event_id`; a avaliação de eventos fora
+de ordem compara com o estado confirmado antes desse lote. Logs rejeitados
+somente para detecção não alteram sequências nem produzem Alerts.
+
+`AlertRecord` recebe UUID, regra, Asset, conta monitorada, evento acionador,
+Severity, Status NEW e `created_at` igual ao instante desse evento. IDs internos
+do motor não identificam Alerts persistidos. `AlertLog` conserva a ordem das
+evidências. FKs RESTRICT preservam os vínculos e a unicidade de regra/evento
+acionador complementa a deduplicação temporal de DR01/DR02.
+
+O router confirma uma única transação com Logs, Alerts, evidências e novo estado.
+Falhas de avaliação, gravação ou commit revertem todas essas mudanças. O estado
+restaurado não é reutilizado globalmente após rollback. A migration inicializa
+DR01-DR03 ACTIVE com Severity fixa e estado vazio; não avalia Logs existentes.
+
+Essa coordenação reduz paralelismo, e o histórico serializado cresce com os
+eventos. Alterações nos campos internos do motor exigem compatibilidade do
+formato e testes de recuperação. O [ADR-003](adr/03-estado-transacional-detection-engine.md)
+detalha a proposta e permanece pendente de revisão arquitetural. Não há API de
+administração de regras ou consulta de Alerts; geração não autoriza ADMIN a
+consultá-los. RNF03 completo e RNF06 exigem suas verificações específicas.
 
 [Incidents](regras-transicao-incidentes.md) e
 [Investigations](regras-investigacoes.md) são validadores independentes de

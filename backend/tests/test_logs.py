@@ -81,7 +81,7 @@ def test_import_persists_valid_event_and_instant(log_context, event_type, instan
     response = client.post("/logs/import", json=[record])
     # Assert
     assert response.status_code == 200
-    assert response.json() == {"accepted": 1, "rejected": 0, "rejections": []}
+    assert response.json() == {"accepted": 1, "rejected": 0, "rejections": [], "detection": {"evaluated": 1, "rejected": 0, "rejections": [], "alerts_created": 0}}
     assert response.headers["cache-control"] == "no-store"
     with factory() as db:
         log = db.get(LogRecord, record["event_id"])

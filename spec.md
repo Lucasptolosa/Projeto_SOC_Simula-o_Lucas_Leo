@@ -102,13 +102,59 @@ Asset realmente cadastrado.
 - Logs já persistidos são preservados após desativação do Asset. A relação
   referencial bloqueia exclusão que destruiria esse histórico.
 
-A aceitação na importação significa validação e persistência. A avaliação
-de Detection Rules deve atender RF07/RF08 e à continuidade e ordenação da
-seção 8.2. A camada de ingestão não rejeita um evento válido por ser anterior
-a outro já importado. A operação de importação não fornece consulta de Logs
-(RF27), interface, auditoria adicional de importação ou política de
-reprocessamento de detecção. Esses limites da importação não eliminam RF07,
-RF08 ou RF27.
+`accepted` significa validação e persistência. A camada de ingestão não rejeita
+um evento válido por ser anterior a outro já importado. O resultado da avaliação
+é informado separadamente, conforme a seção 3.1.2. Consulta de Logs (RF27),
+interface, auditoria adicional de importação e reprocessamento de detecção
+não fazem parte do contrato de ingestão.
+
+#### 3.1.2 Integração da importação com Detection Engine
+
+A integração atende a RF07, RF08, RF09, RF22, RF23 e às seções 8 a 8.2,
+preservando as regras e os contratos de ingestão:
+
+- Depois da validação e inserção, somente os Logs novos persistidos pelo lote
+  participam da detecção. Itens inválidos ou duplicados não entram no motor.
+- A avaliação usa `occurred_at`, ordena o lote por esse instante e depois por
+  `event_id`, e respeita as janelas e deduplicação da seção 8. A comparação de
+  eventos de lotes posteriores usa o estado confirmado antes do lote atual.
+- Um Log fora de ordem na seção 8.2 continua persistido, mas é rejeitado para
+  detecção: não altera as sequências nem gera Alert. Não é contado novamente
+  em `rejected` da ingestão.
+- A resposta de `POST /logs/import` acrescenta `detection`, com `evaluated`
+  (Logs aceitos para avaliação, ainda que nenhuma regra gere Alert), `rejected`,
+  `rejections` e `alerts_created`. Cada rejeição de detecção usa a posição original,
+  motivo `out_of_order` e detalhe fixo `Evento fora de ordem para detecção.`.
+  `detection.evaluated + detection.rejected` equivale a `accepted` da ingestão.
+  As listas de rejeição preservam posições crescentes da entrada, sem payloads.
+- A migration cria o catálogo DR01-DR03 inicialmente `ACTIVE`, com as Severities
+  fixas da seção 8. Cada lote carrega o estado persistido das regras. Não há
+  alteração de parâmetros nem cadastro de regras pela aplicação.
+- Cada Alert recebe UUID gerado pelo servidor, Status `NEW`, Severity da regra,
+  Asset e conta monitorada, instante `created_at` igual ao `occurred_at` do evento
+  acionador e vínculos ordenados aos Logs de evidência usados pelo motor.
+- Logs, Alerts, evidências e estado do motor são confirmados na mesma transação.
+  Falha operacional ou de commit reverte o conjunto e não retorna sucesso parcial.
+  O estado de sequências, deduplicação e último instante processado é recuperado
+  em novos processos da aplicação após operações confirmadas.
+- Lotes simultâneos são serializados no banco antes de inserir novos Logs.
+  O lote que obtiver o bloqueio primeiro estabelece a ordem entre lotes; a
+  seção 8.2 é aplicada aos seguintes. Não há reordenação global por instante
+  entre requisições simultâneas. UUIDs e unicidade por regra/evento acionador
+  protegem a identidade dos Alerts; a deduplicação DR01/DR02 permanece no motor.
+- A integração começa nos novos lotes após a migration. Logs anteriormente
+  importados não são avaliados automaticamente nem reutilizados para iniciar
+  sequências. Reenviá-los continua sendo duplicação; não é reprocessamento.
+- O histórico de falhas acompanha eventos mesmo com uma regra inativa, sem
+  emitir Alert por ela. `AUTH_SUCCESS` consome as falhas da DR02 inclusive
+  inativa; reativação só afeta avaliações posteriores, sem emissão retroativa.
+
+A geração e a persistência de Alerts não disponibilizam sua consulta ao ADMIN.
+A matriz da seção 2 permanece válida. Consulta/gestão de Alerts e API
+administrativa de ativação/desativação com auditoria (RF18/RF15.1) são operações
+distintas; a integração lê o catálogo persistido sem expor mutações de regras.
+RNF06 exige medição própria no ambiente de referência e não é demonstrado
+somente pela execução dos testes funcionais.
 
 ### 3.2 Contratos de gerenciamento de Assets
 

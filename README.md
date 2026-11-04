@@ -32,6 +32,7 @@ backend/
     users/             administração de contas
     assets/            administração de ativos
     logs/              importação persistente
+    detection/         catálogo, estado e Alerts persistidos
     audit/             registros e consultas de auditoria
     incidents/         validação das transições de Incident
     investigations/    validação de investigação e falso positivo
@@ -140,7 +141,8 @@ python -m alembic upgrade head
 
 Confira o banco de destino em `.env` e revise as
 [migrations](backend/migrations/versions) antes do upgrade. Elas criam a
-estrutura de Users, sessões, auditoria, Assets e Logs, sem criar contas.
+estrutura de Users, sessões, auditoria, Assets, Logs, catálogo de regras,
+estado de detecção, Alerts e evidências, sem criar contas.
 O Alembic usa `Settings` e a `Base.metadata` compartilhada; a URL genérica de
 `alembic.ini` não define a conexão. Geração offline de SQL não é suportada.
 
@@ -148,6 +150,14 @@ Não recrie tabelas existentes nem edite revisões já aplicadas em ambientes
 persistentes. Uma revisão registrada como aplicada não é executada novamente
 por `upgrade head`; divergências de estrutura exigem análise e migration
 aditiva. Reversões com perda de dados não são procedimentos de manutenção.
+
+A revisão `0006_detection_persistence` sucede `0005_create_logs` e cria
+`detection_rules`, `detection_state`, `alerts` e `alert_logs`. Inicializa DR01-DR03
+ACTIVE, com Severity fixa, e estado vazio versionado. Deve estar aplicada antes
+de servir a aplicação. Não processa Logs existentes nem os utiliza para iniciar
+sequências; reenviar esses Logs continua sendo duplicação. Recuperação e backup
+devem preservar o conjunto de tabelas de um mesmo ponto confirmado. Não execute
+downgrade destrutivo ou exclusão de histórico para reaplicar a revisão.
 
 ### Administrator inicial
 
@@ -189,14 +199,14 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Assets | ADMIN usa `POST /assets`, `PATCH /assets/{id}` e `POST /assets/{id}/deactivate`; alterações efetivas geram auditoria atômica. |
 | Auditoria | ADMIN consulta `GET /audit-logs` e `/app/audit-logs`, em ordem recente primeiro. Não há operações de edição ou exclusão. |
 | Logs | ADMIN envia lotes JSON a `POST /logs/import`; validação e persistência com rejeição individual e unicidade de `event_id`. |
-| Detection Engine | Avaliação em memória de DR01, DR02 e DR03, com regras ativas, janelas temporais e deduplicação. |
+| Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Incidents | [Validação pura das transições](docs/regras-transicao-incidentes.md) e dos textos obrigatórios. |
 | Investigations | [Validação pura de investigação, falso positivo e elegibilidade de escalonamento](docs/regras-investigacoes.md). |
 
-A importação de Logs não chama o Detection Engine nem gera Alerts. Os núcleos
-de Incidents e Investigations não fornecem persistência ou rotas de negócio.
-Consulta de Logs, APIs persistidas desses fluxos e Dashboard são definidos na
-spec e não são expostos pela aplicação.
+Os núcleos de Incidents e Investigations não fornecem persistência ou rotas de
+negócio. Consulta de Logs e Alerts, APIs persistidas de investigação/tratamento,
+administração de regras e Dashboard são definidos na spec e não são expostos
+pela aplicação. Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
 A página `/app` exibe a identidade autenticada; as páginas administrativas são
 exclusivas de ADMIN. ADMIN não herda as permissões de ANALYST. Não há cadastro
@@ -204,6 +214,50 @@ público, reset de senha ou reativação de contas pela API.
 
 Os contratos completos, incluindo limite de 1.024 bytes UTF-8 para `event_id`,
 Assets inativos, rejeições e regras de Users/Assets, estão na [spec](spec.md).
+
+### Importação e detecção
+
+`POST /logs/import` mantém `accepted`, `rejected` e `rejections` como resultado
+da validação e persistência. Somente Logs novos e válidos entram no motor.
+O bloco `detection` separa o resultado da avaliação:
+
+```json
+{
+  "accepted": 2,
+  "rejected": 0,
+  "rejections": [],
+  "detection": {
+    "evaluated": 1,
+    "rejected": 1,
+    "rejections": [
+      {"position": 2, "reason": "out_of_order", "detail": "Evento fora de ordem para detecção."}
+    ],
+    "alerts_created": 0
+  }
+}
+```
+
+O exemplo representa dois Logs aceitos na ingestão, com um deles fora de ordem
+para detecção. Esse Log permanece armazenado e não altera sequências ou gera
+Alert. `detection.evaluated + detection.rejected` equivale a `accepted`.
+Posições começam em 1 na entrada original; cada lote é avaliado por
+`occurred_at` e depois `event_id`. O estado confirmado antes do lote define os
+limites temporais para eventos de lotes posteriores.
+
+Cada Alert possui UUID, Status NEW, Severity da regra, instante do evento
+acionador e vínculos ordenados aos Logs de evidência, protegidos por FKs.
+Logs, Alerts, evidências e estado do motor são confirmados na mesma transação;
+falha operacional ou de commit reverte o conjunto. Contagens de sucesso só são
+retornadas após commit.
+
+O módulo `app/detection` restaura uma instância do motor por transação a partir
+de JSONB versionado. O bloqueio da linha única de estado precede a ingestão e
+coordena lotes de diferentes processos; não há estado global mutável ou reset
+silencioso para catálogo/estado inconsistente. A serialização limita o
+paralelismo e o histórico pode crescer; testes funcionais não comprovam RNF06.
+Os [contratos de integração](spec.md#312-integração-da-importação-com-detection-engine)
+e o [guia dos componentes](docs/arquitetura-aplicacao.md) detalham ordenação,
+deduplicação, recuperação e limites arquiteturais.
 
 ## Testes automatizados
 
@@ -234,6 +288,10 @@ python -m pytest --noconftest tests/test_detection_engine.py tests/test_detectio
 ```
 
 Os comandos específicos de domínio estão nas documentações vinculadas acima.
+Os testes `tests/test_detection_persistence.py` e
+`tests/test_detection_transactions.py` verificam evidências, janelas temporais,
+ordenação, regras inativas, rollback, concorrência, continuidade em processos
+independentes e migration sem avaliação retroativa de Logs.
 A cobertura mede Python; não comprova cobertura de JavaScript/CSS, conformidade
 integral de acessibilidade ou todos os requisitos não funcionais. Os testes web
 usam Chromium com transporte ASGI/TestClient; validação de TLS/proxy real e de
@@ -305,4 +363,5 @@ nem pelas migrations e não garante sigilo de todo erro.
 - [Arquitetura dos componentes](docs/arquitetura-aplicacao.md).
 - [ADR-001 — Arquitetura técnica](docs/adr/01-arquitetura-inicial.md).
 - [ADR-002 — Extensão do Detection Engine](docs/adr/02-extensao-detection-rules.md).
+- [ADR-003 — Estado transacional do Detection Engine](docs/adr/03-estado-transacional-detection-engine.md).
 - [Incidents](docs/regras-transicao-incidentes.md) e [Investigations](docs/regras-investigacoes.md).
