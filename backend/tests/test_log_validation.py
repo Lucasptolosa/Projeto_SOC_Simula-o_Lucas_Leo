@@ -23,7 +23,8 @@ def test_event_id_byte_limit_preserves_original(log_context, identifier):
     # Assert
     assert len(identifier.encode("utf-8")) == 1024
     assert response.status_code == 200
-    assert response.json() == {"accepted": 1, "rejected": 0, "rejections": []}
+    assert response.json() == {"accepted": 1, "rejected": 0, "rejections": [],
+        "detection": {"evaluated": 1, "rejected": 0, "rejections": [], "alerts_created": 0}}
     with factory() as db:
         assert db.get(LogRecord, identifier).event_id == identifier
 
@@ -58,7 +59,7 @@ def test_invalid_text_is_rejected_before_log_insert(log_context, monkeypatch, ca
     assert response.status_code == 200
     assert response.json() == {"accepted": 2, "rejected": 1, "rejections": [
         {"position": 2, "reason": "invalid_" + field, "detail": f"Campo {field} inválido ou ausente."},
-    ]}
+    ], "detection": {"evaluated": 2, "rejected": 0, "rejections": [], "alerts_created": 0}}
     assert calls == ["before", "after"]
     assert log_count(factory) == 2
     with factory() as db:

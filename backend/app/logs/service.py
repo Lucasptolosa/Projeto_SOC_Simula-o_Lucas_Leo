@@ -7,6 +7,7 @@ from app.logs import repository
 from app.logs.schemas import ImportSummary, LogInput, RejectedLog
 from app.users import repository as user_repository
 from app.users.models import UserRole, UserStatus
+from app.detection import service as detection_service
 
 
 class LogImportError(ValueError):
@@ -35,7 +36,9 @@ def import_logs(db: Session, author_id: UUID, records: list) -> ImportSummary:
     authorize_import(db, author_id)
     if not 1 <= len(records) <= 1000:
         raise LogImportError("invalid_batch_size")
+    state = detection_service.lock_state(db)
     accepted = 0
+    inserted = []
     rejected = []
     for position, record in enumerate(records, start=1):
         try:
@@ -51,4 +54,7 @@ def import_logs(db: Session, author_id: UUID, records: list) -> ImportSummary:
                                          detail="event_id já persistido."))
         else:
             accepted += 1
-    return ImportSummary(accepted=accepted, rejected=len(rejected), rejections=rejected)
+            inserted.append((position, log))
+    detection = detection_service.evaluate(db, state, inserted)
+    return ImportSummary(accepted=accepted, rejected=len(rejected), rejections=rejected,
+                         detection=detection)
