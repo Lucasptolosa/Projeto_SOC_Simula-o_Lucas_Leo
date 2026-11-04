@@ -10,6 +10,7 @@ from app.users.models import User
 from app.auth.models import AuthSession
 from app.audit.models import AuditLog
 from app.assets.models import Asset
+from app.logs.models import LogRecord
 
 
 config = context.config

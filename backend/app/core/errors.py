@@ -11,7 +11,10 @@ logger = logging.getLogger("mini_soc.server")
 
 
 async def validation_error(request: Request, error: RequestValidationError):
-    if request.url.path.startswith(("/auth/", "/users", "/audit-logs")):
+    if request.url.path.startswith("/logs/"):
+        logger.warning("timestamp=%s operation=/logs/import category=RequestValidationError",
+                       datetime.now(timezone.utc).isoformat())
+    if request.url.path.startswith(("/auth/", "/users", "/audit-logs", "/logs")):
         return JSONResponse(
             status_code=422, content={"detail": "Requisição inválida."},
             headers={"Cache-Control": "no-store"},
