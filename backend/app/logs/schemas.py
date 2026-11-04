@@ -30,7 +30,7 @@ class LogInput(BaseModel):
     @classmethod
     def bounded_identifier(cls, value: str) -> str:
         if len(value.encode("utf-8")) > EVENT_ID_MAX_BYTES:
-            raise ValueError("Identificador excede o limite proposto.")
+            raise ValueError("Identificador excede o limite permitido.")
         return value
 
     @field_validator("occurred_at", mode="before")

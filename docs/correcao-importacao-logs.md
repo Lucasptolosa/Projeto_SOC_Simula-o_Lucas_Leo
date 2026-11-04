@@ -4,28 +4,34 @@ Branch própria `fix/validacao-importacao-logs`, baseada na head do PR #41.
 Nenhuma alteração direta na branch da Pessoa 2. Esta entrega não gera Alerts,
 não acrescenta funcionalidades e não encerra #40 ou #12.
 
-## Contratos para aceite
+## Contratos aprovados
+
+Aceite confirmado explicitamente pelo usuário no chat do Codex em 2026-11-04:
+os dois integrantes do projeto aprovaram as quatro decisões abaixo. Esse
+registro não é uma revisão APPROVED do GitHub nem uma autorização de merge.
 
 | Decisão | Estado |
 |---|---|
-| Limitar event_id a 1.024 bytes UTF-8 | Proposta técnica nova, pendente de aprovação do Spec Owner. |
-| Aceitar eventos de Asset INACTIVE | Implementado no #41; #40 ainda registra confirmação pendente. |
-| Preservar textos sem normalização e sem truncamento | Confirmar o contrato adicional registrado na #40; nenhum valor válido é modificado pela correção. |
-| Rejeitar campos desconhecidos por registro | Implementado no #41; confirmar aceite do Spec Owner. |
+| Limitar event_id a 1.024 bytes UTF-8 | Aprovado; validação e constraint implementadas no #44. |
+| Aceitar eventos de Asset INACTIVE | Aprovado; implementado no #41. |
+| Preservar textos sem normalização e sem truncamento | Aprovado; nenhum valor válido é modificado. |
+| Rejeitar campos desconhecidos por registro | Aprovado; implementado no #41. |
 
-O código e a edição da spec não são evidência de aprovação. A confirmação
-dessas decisões deve anteceder a integração do #41. O limite de username não
-foi alterado. O formato principal de Logs e os RF existentes são preservados.
+O aceite decorre da confirmação acima, não da mera existência do código.
+O limite de username não foi alterado. O formato principal de Logs e os RF
+existentes são preservados. A incorporação do #44 ainda depende da revisão da
+Pessoa 2 e de autorização específica para alterar a branch compartilhada;
+o merge do #41 à main exige autorização própria.
 
 ## Validação e persistência
 
 A chave primária textual usa índice B-tree, cuja capacidade por entrada é
 limitada. Texto sem limite na API não garante que todo identificador caiba no
-índice. O valor proposto de 1.024 bytes é medido com encode UTF-8 no Pydantic e
+índice. O limite aprovado de 1.024 bytes é medido com encode UTF-8 no Pydantic e
 octet_length(convert_to(event_id, 'UTF8')) no PostgreSQL; não é contagem de caracteres. Assim, 512 caracteres
 de dois bytes ou 256 de quatro bytes podem atingir exatamente o limite.
 
-EVENT_ID_MAX_BYTES e ck_logs_event_id_bytes refletem a mesma proposta. A
+EVENT_ID_MAX_BYTES e ck_logs_event_id_bytes refletem o mesmo contrato. A
 migration 0005 ainda não integrada foi ajustada com a constraint equivalente;
 ela permanece após 0004, sem nova head ou tabela duplicada. Metadata e schema
 são comparados pelos testes. PostgreSQL não armazena NUL em text; a validação
@@ -94,8 +100,9 @@ ausência de INSERT para inválidos e constraint real. Os testes anteriores de
 unicidade, duas conexões concorrentes, autorização e rollback são preservados.
 A composição temporária com a main atual mantém Chromium e os gates específicos
 de Incidents/Investigations em 80%, além dos 70% gerais. O PR de correção é
-draft e aponta para a branch do #41; a execução dessa base não inclui os dois
-domínios que já estão na main, por isso a composição também é testada à parte.
+direcionado à branch do #41 e aguarda revisão/autorização de incorporação;
+a execução dessa base não inclui os dois domínios que já estão na main, por
+isso a composição também é testada à parte.
 
 Referências: [B-tree PostgreSQL 17](https://www.postgresql.org/docs/17/btree.html)
 e [logging PostgreSQL 17](https://www.postgresql.org/docs/17/runtime-config-logging.html).
