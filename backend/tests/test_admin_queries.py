@@ -253,7 +253,8 @@ def test_auditoria_ordenada_com_desempate_e_dados(queries, caplog):
     assert body["total"] == 4
     assert [row["id"] for row in body["items"]] == [str(UUID(int=n)) for n in [103, 102, 101, 100]]
     for row in body["items"]:
-        assert set(row) == {"id", "author_id", "action", "entity_type", "entity_id", "occurred_at", "old_role", "new_role"}
+        assert set(row) == {"id", "author_id", "action", "entity_type", "entity_id", "occurred_at", "old_role", "new_role", "old_status", "new_status"}
+        assert row["old_status"] is row["new_status"] is None
         assert row["author_id"] == str(UUID(int=1)) and row["action"] == "USER_UPDATED"
         assert row["entity_type"] == "USER" and row["entity_id"] == str(UUID(int=2))
         assert datetime.fromisoformat(row["occurred_at"].replace("Z", "+00:00")).tzinfo is not None
