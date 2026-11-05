@@ -203,7 +203,7 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
 | Incidents | ANALYST consulta lista e detalhe em `/app/incidents`, aplica filtros e executa tratamento, contenção e resolução pelas APIs existentes. [Contratos e regras](docs/regras-transicao-incidentes.md). |
-| Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
+| Investigations | ANALYST acessa `/app/investigations` para iniciar pelo Alert, consultar observações, descartar False Positive ou escalonar pelas APIs existentes. [Contratos e API](docs/regras-investigacoes.md). |
 
 Consulta geral de Alerts e Dashboard
 não são expostos pela aplicação.
