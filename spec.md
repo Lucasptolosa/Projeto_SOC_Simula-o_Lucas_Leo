@@ -156,6 +156,39 @@ lê o catálogo persistido sem modificar suas configurações durante a avaliaç
 RNF06 exige medição própria no ambiente de referência e não é demonstrado
 somente pela execução dos testes funcionais.
 
+#### 3.1.3 Consulta de Logs
+
+O contrato detalha RF27, respeitando RF03/RNF02, RF19.2 e a preservação do RN05:
+
+- `GET /logs` é exclusivo de ADMIN ou ANALYST autenticado e ativo. A consulta
+  revalida o autor no servidor. Identidade inválida/inativa retorna HTTP 401;
+  papel incompatível retorna HTTP 403. GET não exige Origin ou CSRF de escrita.
+- A resposta HTTP 200 contém `items`, `total`, `page` e `page_size`. Cada item
+  apresenta event_id, asset_id, occurred_at, event_type e username persistidos,
+  no mesmo formato validado dos registros de Log, sem campos internos adicionais.
+- Paginação compartilhada: page padrão 1, de 1 a 10.000; page_size padrão 20,
+  de 1 a 100. Total conta os registros filtrados antes de paginar. Página além
+  dos resultados é válida e retorna items vazio, preservando total e parâmetros.
+- A ordem é `occurred_at DESC, event_id ASC`, com desempate pelo identificador.
+- Filtros opcionais asset_id, event_type, username, occurred_from e occurred_to
+  são aplicados conjuntamente. Asset é UUID e event_type usa os três tipos da
+  seção 3. Username usa igualdade exata, sem conversão de caixa, remoção de
+  espaços ou normalização; não exige correspondência a um User do Mini SOC.
+  Valores textuais inválidos seguem a validação de username da seção 3.1.1.
+- O período filtra occurred_at. Limites são inclusivos e independentes, exigem
+  ISO 8601 com fuso explícito e reconhecem offsets equivalentes. Limites iguais
+  são válidos; início posterior ao fim é inválido.
+- UUID válido sem correspondência ou filtros sem resultados retornam página
+  vazia. Logs históricos e de Assets INACTIVE permanecem consultáveis.
+- Paginação, UUID, tipo, username ou período inválidos e parâmetros desconhecidos
+  retornam HTTP 422 genérico, sem refletir valores recebidos. Respostas usam no-store.
+- A operação não emite DML, commit ou avaliação do motor e não altera Logs,
+  Assets, regras, estado, Alerts, evidências, investigações, incidentes ou auditoria.
+  Não há migration, nova entidade Log, reprocessamento ou mudança da importação.
+- Contagem e itens são SELECTs separados em READ COMMITTED. Mudanças concorrentes
+  podem ser observadas entre leituras/páginas; ordem determinística não constitui
+  snapshot de navegação. Não há endpoint adicional de detalhe ou exportação.
+
 ### 3.2 Contratos de gerenciamento de Assets
 
 Os contratos de gerenciamento de Assets detalham RF04, RF05 e RF29:

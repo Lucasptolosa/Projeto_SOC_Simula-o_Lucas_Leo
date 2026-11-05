@@ -1,9 +1,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.logs.models import EVENT_ID_MAX_BYTES, EventType
+from app.core.pagination import PaginationQuery
 
 
 class LogInput(BaseModel):
@@ -47,6 +48,30 @@ class RejectedLog(BaseModel):
     position: int
     reason: str
     detail: str
+
+
+class LogsQuery(PaginationQuery):
+    asset_id: UUID | None = None
+    event_type: EventType | None = None
+    username: str | None = Field(default=None, strict=True)
+    occurred_from: AwareDatetime | None = None
+    occurred_to: AwareDatetime | None = None
+
+    @field_validator("username")
+    @classmethod
+    def valid_username(cls, value):
+        return None if value is None else LogInput.nonempty_text(value)
+
+    @field_validator("occurred_from", "occurred_to", mode="before")
+    @classmethod
+    def explicit_period(cls, value):
+        return None if value is None else LogInput.explicit_datetime(value)
+
+    @model_validator(mode="after")
+    def valid_interval(self):
+        if self.occurred_from is not None and self.occurred_to is not None and self.occurred_from > self.occurred_to:
+            raise ValueError("Intervalo inválido.")
+        return self
 
 
 class DetectionSummary(BaseModel):
