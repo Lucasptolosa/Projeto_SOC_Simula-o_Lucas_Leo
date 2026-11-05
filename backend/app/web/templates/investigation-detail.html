@@ -1,0 +1,18 @@
+{% extends "shell.html" %}
+{% block content %}
+<p class="page-description"><a href="/app/investigations">← Voltar para Investigations</a>. Datas exibidas com o fuso retornado pela API.</p>
+<section id="investigation-panel" class="panel" data-investigation-id="{{ investigation_id }}" hidden>
+  <div id="investigation-data" class="incident-detail" hidden>
+    <dl class="incident-facts"><div><dt>Investigation (ID)</dt><dd class="identifier" data-investigation-field="id"></dd></div><div><dt>Alert (ID)</dt><dd class="identifier" data-investigation-field="alert_id"></dd></div><div><dt>Responsável inicial (ID)</dt><dd class="identifier" data-investigation-field="analyst_id"></dd></div><div><dt>Status</dt><dd data-investigation-field="status"></dd></div><div><dt>Início</dt><dd><time data-investigation-field="started_at"></time></dd></div></dl>
+    <section id="investigation-dismissal" class="incident-history" hidden><h2>False Positive</h2><p class="incident-text" data-investigation-field="justification"></p><dl><dt>Analista (ID)</dt><dd class="identifier" data-investigation-field="dismissed_by"></dd><dt>Instante</dt><dd><time data-investigation-field="dismissed_at"></time></dd></dl></section>
+    <div id="investigation-decisions" class="incident-actions" hidden><button id="dismiss-investigation" class="quiet" type="button">Descartar False Positive</button><button id="escalate-investigation" class="primary" type="button">Escalonar para Incident</button></div>
+    <p id="investigation-terminal" class="muted" hidden>Decisão concluída. Descarte e escalonamento indisponíveis.</p>
+    <section id="created-incident" class="incident-history" hidden><h2>Incident confirmado</h2><p id="created-incident-summary" class="identifier"></p><a id="created-incident-link">Abrir Incident</a></section>
+    <form id="observation-form" class="investigation-form"><h2>Registrar observação</h2><label for="observation-content">Observação</label><textarea id="observation-content" name="content" rows="4" required></textarea><button class="primary" type="submit">Registrar observação</button></form>
+    <h2>Observações</h2>
+    <div class="table-scroll" role="region" aria-label="Observações da Investigation" tabindex="0"><table><thead><tr><th scope="col">Texto</th><th scope="col">Analista (ID)</th><th scope="col">Instante</th></tr></thead><tbody id="observation-results"></tbody></table></div>
+  </div>
+  {% include "pagination.html" %}
+</section>
+<dialog id="dismiss-dialog" class="user-dialog" aria-labelledby="dismiss-title"><h2 id="dismiss-title">Descartar False Positive</h2><p class="muted">A justificativa será preservada com autoria e instante.</p><p id="dismiss-error" class="feedback error" role="alert"></p><form id="dismiss-form"><label for="dismiss-justification">Justificativa</label><textarea id="dismiss-justification" name="justification" rows="5" required></textarea><div class="dialog-footer"><button type="button" class="quiet dialog-cancel">Cancelar</button><button class="primary" type="submit">Confirmar descarte</button></div></form></dialog>
+{% endblock %}
