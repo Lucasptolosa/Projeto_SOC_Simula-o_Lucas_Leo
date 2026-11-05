@@ -34,7 +34,7 @@ backend/
     logs/              importação persistente
     detection/         catálogo, estado e Alerts persistidos
     audit/             registros e consultas de auditoria
-    incidents/         validação das transições de Incident
+    incidents/         escalonamento, persistência e regras de Incident
     investigations/    investigações, observações e falso positivo
     web/               páginas, templates e recursos estáticos
     core/              configuração, paginação e erros
@@ -142,7 +142,8 @@ python -m alembic upgrade head
 Confira o banco de destino em `.env` e revise as
 [migrations](backend/migrations/versions) antes do upgrade. Elas criam a
 estrutura de Users, sessões, auditoria, Assets, Logs, catálogo de regras,
-estado de detecção, Alerts, evidências, investigações e observações, sem criar contas.
+estado de detecção, Alerts, evidências, investigações, observações e Incidents,
+sem criar contas.
 O Alembic usa `Settings` e a `Base.metadata` compartilhada; a URL genérica de
 `alembic.ini` não define a conexão. Geração offline de SQL não é suportada.
 
@@ -200,13 +201,13 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Auditoria | ADMIN consulta `GET /audit-logs` e `/app/audit-logs`, em ordem recente primeiro. Não há operações de edição ou exclusão. |
 | Logs | ADMIN envia lotes JSON a `POST /logs/import`; validação e persistência com rejeição individual e unicidade de `event_id`. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
-| Incidents | [Validação pura das transições](docs/regras-transicao-incidentes.md) e dos textos obrigatórios. |
+| Incidents | ANALYST escalona uma Investigation IN_REVIEW para Incident OPEN e recupera o registro individual. [Contratos e regras](docs/regras-transicao-incidentes.md). |
 | Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
-Incidents possui somente o núcleo de validação, sem persistência ou rotas de
-tratamento. Consulta geral de Logs e Alerts, escalonamento, administração de
-regras, Dashboard e interface web de Investigations não são expostos pela
-aplicação. Gerar Alerts na importação não concede sua consulta ao ADMIN.
+As transições de tratamento de Incident possuem validadores de domínio, sem
+rotas de execução ou resolução. Consulta geral de Logs e Alerts, administração
+de regras, Dashboard e interface web do ANALYST não são expostos pela aplicação.
+Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria
 `investigations` e `investigation_observations`, com vínculos aos Alerts e Users
@@ -214,6 +215,12 @@ existentes. Acrescenta `old_status/new_status` aos Audit Logs, sem reutilizar
 campos de papel ou modificar registros anteriores. Consulte a
 [documentação de Investigations](docs/regras-investigacoes.md) para rotas,
 paginação e regras de transação.
+
+`POST /investigations/{id}/escalate` cria um Incident e altera o Alert para
+ESCALATED com auditoria na mesma transação. O Incident herda a Severity do
+Alert e registra o solicitante como responsável; `GET /incidents/{id}` recupera
+o registro. Ambas as operações exigem ANALYST ativo. A revisão
+`0008_create_incidents` sucede a 0007 e garante um Incident por Alert no banco.
 
 A página `/app` exibe a identidade autenticada; as páginas administrativas são
 exclusivas de ADMIN. ADMIN não herda as permissões de ANALYST. Não há cadastro

@@ -25,7 +25,7 @@ não confirmam isoladamente partes de uma operação de negócio. A conexão usa
 READ COMMITTED, `pool_pre_ping`, timeout e ocultação de parâmetros SQL.
 
 As [migrations](../backend/migrations/versions) formam uma cadeia única:
-Users → sessões → Audit Logs → Assets → Logs → detecção → Investigations.
+Users → sessões → Audit Logs → Assets → Logs → detecção → Investigations → Incidents.
 A revisão `0006_detection_persistence` acrescenta catálogo, estado, Alerts e
 evidências. Os modelos são carregados pelo
 [ambiente Alembic](../backend/migrations/env.py) para compor a metadata comum.
@@ -35,6 +35,10 @@ PostgreSQL. Regras de domínio sem ORM não criam tabelas.
 A revisão `0007_create_investigations` cria as investigações e observações e
 estende Audit Logs com campos próprios de Status, preservando as revisões e
 os registros existentes.
+
+A revisão `0008_create_incidents` acrescenta Incidents com vínculo único ao
+Alert, responsável, Severity herdada, Status e instante de abertura. Não altera
+as revisões anteriores ou as entidades de Alert/Investigation.
 
 ## Identidade, sessões e autorização
 
@@ -217,8 +221,16 @@ Cada observação possui autor, conteúdo e instante próprios. Descarte preserv
 justificativa, autor e instante e grava um Audit Log com Status anterior/novo.
 As escritas bloqueiam o User para revalidar papel/estado e depois o Alert para
 serializar decisões; o router confirma ou reverte toda a operação. Não há
-restrição de autoria exclusiva ao analista inicial. Escalonamento e persistência
-de Incidents permanecem separados; elegibilidade não cria Incident.
+restrição de autoria exclusiva ao analista inicial.
+
+O serviço de [Incidents](../backend/app/incidents/service.py) reutiliza esse
+contexto e `validate_escalation_eligibility`, adicionando o Incident OPEN,
+copiando a Severity e alterando o Alert para ESCALATED. `ALERT_ESCALATED` registra
+autor, Alert, Status anterior/novo e o mesmo instante da abertura. Unicidade
+por Alert e o lock compartilhado impedem duplicação e decisões concorrentes
+com False Positive. Incident, Alert e auditoria são confirmados ou revertidos
+juntos pela fronteira transacional existente. Os validadores de tratamento
+permanecem separados, sem rotas de execução dessas transições.
 
 ## Interface web e erros
 
