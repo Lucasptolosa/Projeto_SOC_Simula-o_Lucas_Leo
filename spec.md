@@ -262,6 +262,51 @@ configuração fixa da seção 8 e a matriz de permissões da seção 2:
   listagem de regras ou interface web por esse contrato. O catálogo persistido
   e a auditoria existentes são reutilizados, sem recriação ou nova migration.
 
+### 3.4 Consulta de Alerts
+
+O contrato detalha RF16 e a consulta de evidências, respeitando RF03/RNF02,
+RF09/RN01, RN05 e a matriz da seção 2. A consulta é exclusiva de ANALYST ativo;
+ADMIN não herda esse acesso. Sessão inválida/inativa retorna HTTP 401 e papel
+incompatível retorna HTTP 403. GET não exige Origin ou CSRF de escrita.
+
+- `GET /alerts` retorna HTTP 200 com `items`, `total`, `page` e `page_size`.
+  Reutiliza a paginação: page padrão 1, de 1 a 10.000; page_size padrão 20,
+  de 1 a 100. `total` é a quantidade filtrada antes da paginação. Página além
+  dos resultados retorna items vazio, preservando total e parâmetros válidos.
+- A ordenação é `created_at DESC, id ASC`, inclusive no desempate entre Alerts
+  com mesmo instante. Trata-se da ordem de consulta de Alerts, sem alterar a
+  prioridade de Incidents definida no RF34.
+- Os filtros opcionais `severity`, `status`, `asset_id`, `rule_id`, `created_from`
+  e `created_to` são aplicados conjuntamente. Severity admite LOW, MEDIUM, HIGH
+  e CRITICAL; Status admite NEW, IN_REVIEW, DISMISSED e ESCALATED; regra admite
+  DR01, DR02 e DR03. Valores textuais são exatos, sem conversão de caixa.
+- asset_id é UUID. Um UUID válido sem correspondência retorna página vazia;
+  Assets INACTIVE não excluem seus Alerts históricos da consulta.
+- Os limites do período referem-se a `created_at`, são inclusivos e podem ser
+  informados independentemente. Exigem ISO 8601 com offset explícito; offsets
+  diferentes que representem o mesmo instante são equivalentes. Limites iguais
+  são válidos; início posterior ao fim é inválido.
+- Cada item contém id, rule_id, asset_id, username, severity, status e created_at.
+  O valor de Severity/Status é o persistido; a consulta não muda as regras para
+  produzir outras classificações nem executa transições.
+- `GET /alerts/{id}` recebe UUID e retorna HTTP 200 com os mesmos campos e
+  `related_logs`. Cada Log contém event_id, asset_id, occurred_at, event_type
+  e username. As evidências são somente as vinculadas ao Alert, na ordem
+  persistida de AlertLog.position, preservando os textos e instantes originais.
+  Alert inexistente retorna HTTP 404, após autorização.
+- UUID malformado, filtros/paginação/período inválidos e parâmetros desconhecidos
+  retornam HTTP 422 com mensagem genérica, sem refletir valores recebidos.
+  O detalhe não aceita filtros ou parâmetros adicionais. Respostas usam no-store.
+- Consulta não modifica Alerts, Logs, evidências, auditoria, regras, estado do
+  motor ou registros de investigação/incidente e não confirma transações de
+  escrita. Usa os modelos e a persistência existentes, sem migration ou backfill.
+- Contagem, itens e evidências são SELECTs em READ COMMITTED. Atualizações
+  concorrentes podem ser observadas entre consultas ou páginas; a ordenação
+  determinística não constitui um snapshot de navegação.
+
+RNF05 continua sujeito ao procedimento e ambiente de referência da seção 5;
+aprovação de testes funcionais não demonstra o requisito de desempenho.
+
 ## 4. Requisitos funcionais (RF)
 
 **RF01:** WHEN um User ativo informar nome de usuário e senha correspondentes aos valores cadastrados, THE SYSTEM SHALL autenticá-lo;   
