@@ -40,6 +40,7 @@ export function initInvestigations({request, write, notify, authError, savingCha
     results?.replaceChildren();
     const createdSummary = document.querySelector("#created-incident-summary");
     if (createdSummary) { createdSummary.textContent = ""; document.querySelector("#created-incident-link").removeAttribute("href"); }
+    document.querySelector("#investigation-alert-link")?.removeAttribute("href");
     panel.querySelectorAll("[data-investigation-field]").forEach(el => { el.textContent = ""; el.removeAttribute("datetime"); });
     if (data) data.hidden = true;
     panel.hidden = true;
@@ -76,10 +77,13 @@ export function initInvestigations({request, write, notify, authError, savingCha
     page = observations.page; total = observations.total;
     document.querySelector("#page-summary").textContent = `Página ${page} · ${total} registro(s)`;
     const incident = document.querySelector("#created-incident");
-    incident.hidden = !created || created.alert_id !== row.alert_id;
+    const incidentId = row.incident_id;
+    incident.hidden = !incidentId;
+    document.querySelector("#investigation-alert-link").href = `/app/alerts/${encodeURIComponent(row.alert_id)}`;
     if (!incident.hidden) {
-      document.querySelector("#created-incident-summary").textContent = `${created.id} · ${created.severity} · ${created.status}`;
-      document.querySelector("#created-incident-link").href = `/app/incidents/${encodeURIComponent(created.id)}`;
+      document.querySelector("#created-incident-summary").textContent = created?.id === incidentId
+        ? `${incidentId} · ${created.severity} · ${created.status}` : incidentId;
+      document.querySelector("#created-incident-link").href = `/app/incidents/${encodeURIComponent(incidentId)}`;
     }
     data.hidden = false; ready = true;
   }

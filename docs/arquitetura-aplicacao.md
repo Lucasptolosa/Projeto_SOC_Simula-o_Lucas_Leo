@@ -303,7 +303,10 @@ e LogRecord, sem novo ORM ou migration. Filtros são predicados SQL parametrizad
 aplicados tanto à contagem quanto aos itens. A ordenação é created_at DESC/id ASC;
 evidências usam AlertLog.position, sem joins que multipliquem a lista de Alerts.
 
-O detalhe consulta somente os Logs vinculados ao Alert solicitado. Dados e
+O detalhe consulta somente os Logs vinculados ao Alert solicitado e apresenta
+os identificadores persistidos de Investigation e Incident, quando existentes.
+O detalhe de Investigation apresenta o Incident correspondente pelo mesmo
+Alert de origem. Dados e
 contagens são leituras separadas em READ COMMITTED; não há snapshot entre páginas
 ou bloqueio do motor. A consulta não gera Alerts, altera Status ou grava auditoria.
 Os contratos HTTP estão na seção 3.4 da spec; validação funcional não comprova RNF05.

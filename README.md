@@ -211,6 +211,12 @@ O Dashboard de segurança em `/app/dashboard` e `GET /dashboard` é exclusivo de
 ANALYST. Os totais de Alerts e Incidents são calculados por Severity e Status no
 PostgreSQL, incluindo categorias com zero. Recarregar a página reflete as
 transições confirmadas. A consulta não altera registros nem cria auditoria.
+
+No menu ANALYST, acesse **Dashboard → Alerts** para filtrar registros e abrir
+evidências. Um Alert `NEW` abre o formulário de Investigation com o ID
+preenchido. O detalhe recupera as ligações persistidas para Investigation e
+Incident. A Investigation permite descarte com justificativa ou escalonamento
+para tratamento e resolução na área de Incidents.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria

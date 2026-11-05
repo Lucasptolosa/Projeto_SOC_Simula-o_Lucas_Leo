@@ -12,7 +12,7 @@ from app.db.session import get_session
 from app.investigations import service
 from app.investigations.rules import InvestigationRuleError
 from app.investigations.schemas import (
-    FalsePositiveInput, ObservationInput, PublicInvestigation, PublicObservation,
+    FalsePositiveInput, InvestigationDetail, ObservationInput, PublicInvestigation, PublicObservation,
     StartInvestigationInput,
 )
 from app.users.models import User, UserRole
@@ -54,9 +54,9 @@ def start(payload: StartInvestigationInput, author: Analyst, db: Database):
                          PublicInvestigation, commit=True)
 
 
-@router.get("/{investigation_id}", response_model=PublicInvestigation)
+@router.get("/{investigation_id}", response_model=InvestigationDetail)
 def get(investigation_id: UUID, author: Analyst, db: Database):
-    return run_operation(db, lambda: service.get(db, author.id, investigation_id), PublicInvestigation)
+    return run_operation(db, lambda: service.get(db, author.id, investigation_id), InvestigationDetail)
 
 
 @router.post("/{investigation_id}/observations", response_model=PublicObservation, status_code=201)
