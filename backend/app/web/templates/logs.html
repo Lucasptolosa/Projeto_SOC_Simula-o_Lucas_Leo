@@ -1,0 +1,30 @@
+{% extends "shell.html" %}
+{% block content %}
+<section class="panel" aria-label="Consulta de Logs">
+  {% if invalid %}<p role="alert">Filtros inválidos. Use UUID e datas ISO 8601 com fuso.</p>{% endif %}
+  <form id="log-filters" class="incident-filters" method="get" action="/app/logs">
+    <div><label for="log-asset">Asset (UUID)</label><input id="log-asset" name="asset_id" value="{{ filters.asset_id or '' }}"></div>
+    <div><label for="log-type">Tipo de evento</label><select id="log-type" name="event_type"><option value="">Todos</option>{% for value in event_types %}<option {% if value == filters.event_type %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+    <div><label for="log-account">Conta monitorada</label><input id="log-account" name="username" value="{{ filters.username or '' }}"></div>
+    <div><label for="log-from">Ocorrência inicial (ISO 8601)</label><input id="log-from" name="occurred_from" value="{{ filters.occurred_from or '' }}" placeholder="2026-11-05T12:00:00Z"></div>
+    <div><label for="log-to">Ocorrência final (ISO 8601)</label><input id="log-to" name="occurred_to" value="{{ filters.occurred_to or '' }}" placeholder="2026-11-05T18:00:00Z"></div>
+    <button class="primary" type="submit">Aplicar filtros</button>
+  </form>
+  {% if result %}
+  <div class="table-scroll" role="region" tabindex="0" aria-label="Resultados de Logs">
+    <table><thead><tr><th scope="col">Evento</th><th scope="col">Asset</th><th scope="col">Tipo</th><th scope="col">Conta</th><th scope="col">Ocorrência</th></tr></thead>
+      <tbody id="log-results">
+        {% for log in result['items'] %}
+        <tr><td class="incident-text">{{ log.event_id }}</td><td class="identifier">{{ log.asset_id }}</td><td>{{ log.event_type }}</td><td class="incident-text">{{ log.username }}</td><td><time datetime="{{ log.occurred_at.isoformat() }}">{{ log.occurred_at.isoformat() }}</time></td></tr>
+        {% else %}<tr><td colspan="5">Nenhum Log encontrado.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <nav class="pagination-controls" aria-label="Páginas de Logs">
+    <span>Página {{ result.page }} · {{ result.total }} registro(s)</span>
+    {% if previous %}<a href="?{{ previous }}">Anterior</a>{% endif %}
+    {% if following %}<a href="?{{ following }}">Próxima</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% endblock %}
