@@ -290,7 +290,9 @@ incompatível retorna HTTP 403. GET não exige Origin ou CSRF de escrita.
   O valor de Severity/Status é o persistido; a consulta não muda as regras para
   produzir outras classificações nem executa transições.
 - `GET /alerts/{id}` recebe UUID e retorna HTTP 200 com os mesmos campos e
-  `related_logs`. Cada Log contém event_id, asset_id, occurred_at, event_type
+  `related_logs`. O detalhe também inclui `investigation_id` e `incident_id`
+  obtidos pelo vínculo persistido, com `null` quando ausentes. Cada Log contém
+  event_id, asset_id, occurred_at, event_type
   e username. As evidências são somente as vinculadas ao Alert, na ordem
   persistida de AlertLog.position, preservando os textos e instantes originais.
   Alert inexistente retorna HTTP 404, após autorização.

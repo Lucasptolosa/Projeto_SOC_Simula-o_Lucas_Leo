@@ -16,6 +16,7 @@
   let analystManagement = null;
   const incidentPage = page === "incidents" || page === "incident-detail";
   const investigationPage = page === "investigations" || page === "investigation-detail";
+  const alertPage = page === "alerts" || page === "alert-detail";
   const importPage = page === "log-import";
 
   class ApiError extends Error {
@@ -212,7 +213,7 @@
       if (panel) panel.hidden = true;
       throw new ApiError(403);
     }
-    if ((incidentPage || investigationPage) && user.role !== "ANALYST") {
+    if ((incidentPage || investigationPage || alertPage) && user.role !== "ANALYST") {
       analystManagement?.close();
       throw new ApiError(403);
     }
@@ -250,10 +251,11 @@
           savingChanged: (saving) => { logout.disabled = saving; setBusy(busy); },
         });
       }
-      if (incidentPage || investigationPage) {
+      if (incidentPage || investigationPage || alertPage) {
         if (!analystManagement) {
-          const module = await import(incidentPage ? "/static/incidents.js" : "/static/investigations.js");
-          const initialize = incidentPage ? module.initIncidents : module.initInvestigations;
+          const initialize = incidentPage ? (await import("/static/incidents.js")).initIncidents
+            : investigationPage ? (await import("/static/investigations.js")).initInvestigations
+            : (await import("/static/alerts.js")).initAlerts;
           analystManagement = initialize({
             request, write, notify,
             authError: async (error) => {

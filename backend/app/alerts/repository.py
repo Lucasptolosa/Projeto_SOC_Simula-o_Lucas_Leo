@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.alerts.schemas import AlertsQuery
 from app.detection.models import AlertLog, AlertRecord
+from app.incidents.models import Incident
+from app.investigations.models import Investigation
 from app.logs.models import LogRecord
 
 
@@ -30,7 +32,10 @@ def list_alerts(db: Session, params: AlertsQuery) -> dict:
 
 
 def alert(db: Session, alert_id: UUID):
-    return db.execute(select(*FIELDS).where(AlertRecord.id == alert_id)).mappings().one_or_none()
+    query = select(*FIELDS, Investigation.id.label("investigation_id"), Incident.id.label("incident_id"))
+    query = query.select_from(AlertRecord).outerjoin(Investigation, Investigation.alert_id == AlertRecord.id)
+    query = query.outerjoin(Incident, Incident.alert_id == AlertRecord.id).where(AlertRecord.id == alert_id)
+    return db.execute(query).mappings().one_or_none()
 
 
 def evidence(db: Session, alert_id: UUID):
