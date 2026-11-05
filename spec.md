@@ -150,9 +150,9 @@ preservando as regras e os contratos de ingestão:
   inativa; reativação só afeta avaliações posteriores, sem emissão retroativa.
 
 A geração e a persistência de Alerts não disponibilizam sua consulta ao ADMIN.
-A matriz da seção 2 permanece válida. Consulta/gestão de Alerts e API
-administrativa de ativação/desativação com auditoria (RF18/RF15.1) são operações
-distintas; a integração lê o catálogo persistido sem expor mutações de regras.
+A matriz da seção 2 permanece válida. A consulta/gestão de Alerts é distinta
+da geração. A administração de regras com auditoria segue a seção 3.3; o motor
+lê o catálogo persistido sem modificar suas configurações durante a avaliação.
 RNF06 exige medição própria no ambiente de referência e não é demonstrado
 somente pela execução dos testes funcionais.
 
@@ -194,6 +194,40 @@ UUID inválido retorna HTTP 422. Autenticação inválida e papel não permitido
 preservam respectivamente HTTP 401 e HTTP 403 da infraestrutura compartilhada.
 Alteração que informa somente valores já existentes é uma repetição sem mutação:
 retorna o Asset atual, preservando a auditoria existente sem novo registro.
+
+### 3.3 Administração das Detection Rules predefinidas
+
+O contrato detalha RF18, RF23, RF24 e a auditoria do RF15.1, preservando a
+configuração fixa da seção 8 e a matriz de permissões da seção 2:
+
+- `PATCH /detection-rules/{rule_id}` recebe um objeto JSON com somente `status`,
+  obrigatório e exatamente `ACTIVE` ou `INACTIVE`, sem normalização. Campos
+  extras, valores nulos, estados inválidos e ausência de `status` retornam
+  HTTP 422 com erro genérico, sem alteração de registros.
+- A operação é exclusiva de ADMIN autenticado e ativo, com Origin e CSRF
+  existentes. Identidade inválida/inativa retorna HTTP 401; papel ou proteções
+  de escrita incompatíveis retornam HTTP 403. O serviço revalida o autor.
+- A resposta de sucesso é HTTP 200 com `id`, `status` e `severity`, esta fixa
+  conforme a regra. Somente os identificadores exatos DR01, DR02 e DR03 são
+  reconhecidos. Regra inexistente retorna HTTP 404, sem criação automática.
+- Uma repetição do estado atual retorna HTTP 200 com a regra preservada,
+  sem nova mutação nem novo Audit Log. Cada mudança efetiva gera exatamente
+  um Audit Log com autor, instante, entidade `DETECTION_RULE`, identificador
+  da regra e ação `DETECTION_RULE_ACTIVATED` ou `DETECTION_RULE_DEACTIVATED`.
+  Campos de mudança de papel não são reutilizados para estado de regra.
+- Estado da regra e auditoria são confirmados na mesma transação. Falhas de
+  gravação ou commit revertem ambos e retornam erro genérico, sem sucesso parcial.
+- Alteração de regra e importação coordenam-se pelo bloqueio transacional
+  de estado já utilizado pelo motor. A ordem é autor, estado do motor e regra;
+  o lote/alteração que obtiver primeiro o bloqueio estabelece a precedência.
+  Lotes posteriores à confirmação usam o estado atualizado, sem estado global
+  em memória nem mistura de configurações dentro de um lote.
+- Alterar o estado não modifica sequências, Logs, evidências ou Alerts
+  históricos, inclusive sua Severity e Status. Reativação não dispara avaliação
+  retroativa; novos eventos seguem as seções 8 a 8.2 e o histórico preservado.
+- Não há criação/exclusão de regras, alteração de parâmetros/Severity,
+  listagem de regras ou interface web por esse contrato. O catálogo persistido
+  e a auditoria existentes são reutilizados, sem recriação ou nova migration.
 
 ## 4. Requisitos funcionais (RF)
 

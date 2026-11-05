@@ -20,6 +20,11 @@ def rules(db: Session) -> list[DetectionRuleRecord]:
                            .with_for_update().execution_options(populate_existing=True)))
 
 
+def rule_by_id(db: Session, rule_id: str) -> DetectionRuleRecord | None:
+    return db.scalar(select(DetectionRuleRecord).where(DetectionRuleRecord.id == rule_id)
+                     .with_for_update().execution_options(populate_existing=True))
+
+
 def save_alert(db: Session, alert: Alert) -> None:
     row = AlertRecord(rule_id=alert.rule_id, asset_id=UUID(alert.asset_id),
                       username=alert.username, trigger_event_id=alert.related_logs[-1].event_id,
