@@ -123,6 +123,37 @@ Identidade inválida ou User inativo retorna 401; papel ou Origin/CSRF inválido
 inválida, 422. Falha interna retorna erro genérico, com rollback e sem sucesso
 parcial. Respostas protegidas usam Cache-Control no-store.
 
+## Interface web
+
+ANALYST ativo acessa `/app/investigations` para iniciar com o UUID de um Alert
+NEW ou consultar uma Investigation conhecida pelo seu identificador. Não há
+listagem geral de Investigations nem dados demonstrativos na interface.
+`/app/investigations/{id}` apresenta Status, autoria, início, descarte e
+observações paginadas, utilizando as APIs documentadas acima.
+
+Observações e justificativas preservam o texto recebido e são exibidas com
+textContent. Paginação usa Page e os limites compartilhados. As decisões de
+descarte e escalonamento aparecem somente em IN_REVIEW; estados terminais
+não apresentam essas ações. A inclusão de observações segue a API existente,
+sem introduzir restrições de domínio no navegador.
+
+Escalonamento bem-sucedido apresenta o Incident retornado e seu link de detalhe.
+Uma consulta posterior de Investigation não fornece incident_id; a interface
+não inventa esse vínculo nem percorre todas as páginas de Incidents para buscá-lo.
+Sem identificador relacionado disponível, a consulta continua pela área de Incidents.
+
+Cookies, HTTP, CSRF e identidade são compartilhados com as demais páginas.
+Escritas pendentes bloqueiam duplicidade e logout; falha de confirmação não
+repete POST automaticamente. Conflito em Investigation conhecida exige GET
+atualizado antes de nova decisão. Início conflitante sem identificador recuperável
+orienta consultar a Investigation existente, sem criar uma API de busca implícita.
+ADMIN recebe 403, sessão inválida redireciona ao login e erros removem conteúdo
+protegido. Nenhum token é persistido em storage.
+
+Os [testes web](../backend/tests/test_web_investigations.py) usam Chromium real
+com transporte ASGI e mini_soc_test para verificar criação, consulta, observações,
+paginação, descarte, escalonamento, terminalidade, conflitos, segurança e layout.
+
 ## Testes
 
 Com dependências instaladas, a partir de `backend/`:
