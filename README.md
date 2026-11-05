@@ -33,6 +33,7 @@ backend/
     assets/            administração de ativos
     logs/              importação persistente
     detection/         catálogo, estado e Alerts persistidos
+    alerts/            consulta paginada e evidências de Alerts
     audit/             registros e consultas de auditoria
     incidents/         escalonamento, persistência e regras de Incident
     investigations/    investigações, observações e falso positivo
@@ -202,11 +203,12 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Logs | ADMIN envia lotes JSON a `POST /logs/import`; validação e persistência com rejeição individual e unicidade de `event_id`. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
+| Consulta de Alerts | ANALYST usa `GET /alerts` com filtros/paginação e `GET /alerts/{id}` para dados e evidências ordenadas. |
 | Incidents | ANALYST escalona uma Investigation IN_REVIEW para Incident OPEN e recupera o registro individual. [Contratos e regras](docs/regras-transicao-incidentes.md). |
 | Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
 As transições de tratamento de Incident possuem validadores de domínio, sem
-rotas de execução ou resolução. Consulta geral de Logs e Alerts, Dashboard
+rotas de execução ou resolução. Consulta geral de Logs, Dashboard
 e interface web do ANALYST não são expostos pela aplicação.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
@@ -293,6 +295,26 @@ e bloqueia a regra, coordenando-se com a importação. Lotes posteriores ao comm
 usam o novo estado. Não limpa históricos, altera Alerts anteriores ou dispara
 detecção retroativa. Não cria tabelas, migrations, regras ou telas. Os contratos
 estão na seção 3.3 da spec; o guia técnico descreve os bloqueios compartilhados.
+
+### Consulta de Alerts
+
+`GET /alerts` e `GET /alerts/{id}` exigem ANALYST ativo com sessão válida.
+ADMIN recebe 403; sessão inválida ou User inativo, 401. GET não exige os
+cabeçalhos de escrita Origin/CSRF. Respostas usam Cache-Control no-store.
+
+A lista retorna items/total/page/page_size. Padrões e limites são os da
+paginação compartilhada: página 1, tamanho 20, máximos 10.000/100. A ordem é
+created_at DESC/id ASC. Os filtros severity, status, asset_id, rule_id,
+created_from e created_to se combinam por AND. Datas usam ISO 8601 com fuso
+explícito, limites inclusivos e independentes; início posterior ao fim é inválido.
+
+O detalhe apresenta os dados do Alert e related_logs na ordem dos vínculos
+persistidos. Não consulta Logs de outro Alert nem expõe estado interno do motor,
+credenciais ou tokens. UUID inexistente retorna 404; entradas ou parâmetros
+desconhecidos retornam 422 genérico. A consulta preserva os registros e não
+executa geração, transições ou auditoria de alteração. Não há nova migration.
+Os contratos completos estão na seção 3.4 da spec. Contagem e itens são SELECTs
+separados em READ COMMITTED; mudanças concorrentes podem alterar páginas.
 
 ## Testes automatizados
 

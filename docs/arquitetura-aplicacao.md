@@ -208,7 +208,7 @@ Essa coordenação reduz paralelismo, e o histórico serializado cresce com os
 eventos. Alterações nos campos internos do motor exigem compatibilidade do
 formato e testes de recuperação. O [ADR-003](adr/03-estado-transacional-detection-engine.md)
 detalha a proposta e permanece pendente de revisão arquitetural. A administração
-de regras é descrita abaixo; não há consulta geral de Alerts e a geração não
+de regras e a consulta de Alerts são descritas abaixo; a geração não
 autoriza ADMIN a consultá-los. RNF03 completo e RNF06 exigem verificações próprias.
 
 ### Administração de regras
@@ -251,6 +251,25 @@ por Alert e o lock compartilhado impedem duplicação e decisões concorrentes
 com False Positive. Incident, Alert e auditoria são confirmados ou revertidos
 juntos pela fronteira transacional existente. Os validadores de tratamento
 permanecem separados, sem rotas de execução dessas transições.
+
+## Consulta de Alerts
+
+O módulo [alerts](../backend/app/alerts/router.py) oferece GET /alerts e
+GET /alerts/{id} somente a ANALYST ativo, com require_roles/get_session existentes.
+O serviço revalida o autor com current_user/populate_existing. Não solicita locks
+de escrita nem confirma transações. Sessões e autorização preservam seus controles.
+
+[Schemas](../backend/app/alerts/schemas.py) reutilizam PaginationQuery e Page,
+validam filtros/UUIDs/períodos e projetam campos públicos. O
+[repositório](../backend/app/alerts/repository.py) reutiliza AlertRecord, AlertLog
+e LogRecord, sem novo ORM ou migration. Filtros são predicados SQL parametrizados,
+aplicados tanto à contagem quanto aos itens. A ordenação é created_at DESC/id ASC;
+evidências usam AlertLog.position, sem joins que multipliquem a lista de Alerts.
+
+O detalhe consulta somente os Logs vinculados ao Alert solicitado. Dados e
+contagens são leituras separadas em READ COMMITTED; não há snapshot entre páginas
+ou bloqueio do motor. A consulta não gera Alerts, altera Status ou grava auditoria.
+Os contratos HTTP estão na seção 3.4 da spec; validação funcional não comprova RNF05.
 
 ## Interface web e erros
 
