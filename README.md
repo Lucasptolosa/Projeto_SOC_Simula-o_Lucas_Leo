@@ -202,12 +202,11 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Logs | ADMIN envia lotes JSON a `POST /logs/import`; validação e persistência com rejeição individual e unicidade de `event_id`. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
-| Incidents | ANALYST escalona uma Investigation IN_REVIEW para Incident OPEN e recupera o registro individual. [Contratos e regras](docs/regras-transicao-incidentes.md). |
+| Incidents | ANALYST escalona uma Investigation, consulta o Incident individual e executa tratamento, contenção e resolução com auditoria atômica. [Contratos e regras](docs/regras-transicao-incidentes.md). |
 | Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
-As transições de tratamento de Incident possuem validadores de domínio, sem
-rotas de execução ou resolução. Consulta geral de Logs e Alerts, Dashboard
-e interface web do ANALYST não são expostos pela aplicação.
+Consulta geral de Incidents, Logs e Alerts, Dashboard e interface web do ANALYST
+não são expostos pela aplicação.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria
@@ -222,6 +221,14 @@ ESCALATED com auditoria na mesma transação. O Incident herda a Severity do
 Alert e registra o solicitante como responsável; `GET /incidents/{id}` recupera
 o registro. Ambas as operações exigem ANALYST ativo. A revisão
 `0008_create_incidents` sucede a 0007 e garante um Incident por Alert no banco.
+
+`POST /incidents/{id}/transitions` recebe `target_status` e o texto pertinente:
+`containment_description` para CONTAINED ou `resolution_conclusion` para RESOLVED.
+Somente as quatro transições da seção 9 da spec são permitidas. A contenção
+e a resolução preservam texto, autor e instante, além da abertura original.
+A migration `0009_incident_treatment` acrescenta esses campos sem alterar
+registros anteriores. A mudança e seu Audit Log são confirmados na mesma
+transação, sem alterar o Alert ESCALATED ou suas evidências.
 
 A página `/app` exibe a identidade autenticada; as páginas administrativas são
 exclusivas de ADMIN. ADMIN não herda as permissões de ANALYST. Não há cadastro
