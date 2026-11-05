@@ -16,3 +16,5 @@ class PublicAuditLog(BaseModel):
     occurred_at: datetime
     old_role: UserRole | None = None
     new_role: UserRole | None = None
+    old_status: str | None = None
+    new_status: str | None = None

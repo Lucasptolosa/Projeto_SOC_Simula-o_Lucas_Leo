@@ -35,7 +35,7 @@ backend/
     detection/         catálogo, estado e Alerts persistidos
     audit/             registros e consultas de auditoria
     incidents/         validação das transições de Incident
-    investigations/    validação de investigação e falso positivo
+    investigations/    investigações, observações e falso positivo
     web/               páginas, templates e recursos estáticos
     core/              configuração, paginação e erros
     db/                Base, Engine e fábrica de sessões
@@ -142,7 +142,7 @@ python -m alembic upgrade head
 Confira o banco de destino em `.env` e revise as
 [migrations](backend/migrations/versions) antes do upgrade. Elas criam a
 estrutura de Users, sessões, auditoria, Assets, Logs, catálogo de regras,
-estado de detecção, Alerts e evidências, sem criar contas.
+estado de detecção, Alerts, evidências, investigações e observações, sem criar contas.
 O Alembic usa `Settings` e a `Base.metadata` compartilhada; a URL genérica de
 `alembic.ini` não define a conexão. Geração offline de SQL não é suportada.
 
@@ -201,12 +201,19 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Logs | ADMIN envia lotes JSON a `POST /logs/import`; validação e persistência com rejeição individual e unicidade de `event_id`. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Incidents | [Validação pura das transições](docs/regras-transicao-incidentes.md) e dos textos obrigatórios. |
-| Investigations | [Validação pura de investigação, falso positivo e elegibilidade de escalonamento](docs/regras-investigacoes.md). |
+| Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
-Os núcleos de Incidents e Investigations não fornecem persistência ou rotas de
-negócio. Consulta de Logs e Alerts, APIs persistidas de investigação/tratamento,
-administração de regras e Dashboard são definidos na spec e não são expostos
-pela aplicação. Gerar Alerts na importação não concede sua consulta ao ADMIN.
+Incidents possui somente o núcleo de validação, sem persistência ou rotas de
+tratamento. Consulta geral de Logs e Alerts, escalonamento, administração de
+regras, Dashboard e interface web de Investigations não são expostos pela
+aplicação. Gerar Alerts na importação não concede sua consulta ao ADMIN.
+
+A revisão `0007_create_investigations` sucede a persistência de detecção e cria
+`investigations` e `investigation_observations`, com vínculos aos Alerts e Users
+existentes. Acrescenta `old_status/new_status` aos Audit Logs, sem reutilizar
+campos de papel ou modificar registros anteriores. Consulte a
+[documentação de Investigations](docs/regras-investigacoes.md) para rotas,
+paginação e regras de transação.
 
 A página `/app` exibe a identidade autenticada; as páginas administrativas são
 exclusivas de ADMIN. ADMIN não herda as permissões de ANALYST. Não há cadastro

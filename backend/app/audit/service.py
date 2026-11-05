@@ -11,11 +11,13 @@ from app.audit import repository
 def append_audit(
     db: Session, *, author_id: UUID, action: str, entity_type: str,
     entity_id: str, old_role: UserRole | None = None, new_role: UserRole | None = None,
+    old_status: str | None = None, new_status: str | None = None,
+    occurred_at: datetime | None = None,
 ) -> None:
     db.add(AuditLog(
         author_id=author_id, action=action, entity_type=entity_type,
-        entity_id=entity_id, occurred_at=datetime.now(timezone.utc),
-        old_role=old_role, new_role=new_role,
+        entity_id=entity_id, occurred_at=occurred_at or datetime.now(timezone.utc),
+        old_role=old_role, new_role=new_role, old_status=old_status, new_status=new_status,
     ))
 
 
