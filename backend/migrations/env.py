@@ -13,6 +13,7 @@ from app.assets.models import Asset
 from app.logs.models import LogRecord
 from app.detection.models import AlertLog, AlertRecord, DetectionRuleRecord, DetectionState
 from app.investigations.models import Investigation, Observation
+from app.incidents.models import Incident
 
 
 config = context.config

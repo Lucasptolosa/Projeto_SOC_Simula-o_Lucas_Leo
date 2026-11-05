@@ -3,7 +3,7 @@ import json
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import event, func, inspect, select
+from sqlalchemy import event, func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.audit.models import AuditLog
@@ -260,7 +260,7 @@ def test_false_positive_is_atomic_and_audited(investigation_context):
             analyst_id, "ALERT_DISMISSED", "ALERT", str(alert_id))
         assert (audit.old_status, audit.new_status) == ("IN_REVIEW", "DISMISSED")
         assert audit.old_role is audit.new_role is None and audit.occurred_at == row.dismissed_at
-    assert evidence(factory) == before and "incidents" not in inspect(connection).get_table_names()
+    assert evidence(factory) == before and connection.scalar(text("SELECT count(*) FROM incidents")) == 0
     login(client, "log-admin", password)
     public_audit = client.get("/audit-logs").json()["items"][0]
     assert public_audit["old_status"] == "IN_REVIEW" and public_audit["new_status"] == "DISMISSED"

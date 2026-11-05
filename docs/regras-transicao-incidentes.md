@@ -1,6 +1,6 @@
 # Regras de transição de Incidents
 
-O módulo valida as transições da seção 9 da [spec](../spec.md), incluindo
+O núcleo de domínio valida as transições da seção 9 da [spec](../spec.md), incluindo
 RF12, RF13, RF14, RF33 e RN03. É independente de HTTP, persistência e autenticação;
 não cria Incidents nem altera entidades.
 
@@ -59,6 +59,49 @@ e a data/hora, além de gravar o Audit Log na mesma transação, conforme RF15.3
 e RN04. Campos de mudança de papel de User não representam mudança de Status.
 Evidências e associações precisam ser preservadas conforme RN05.
 
+## Escalonamento persistente
+
+A camada de aplicação atende RF11 e RF15.2 reutilizando Investigation e
+AlertRecord. A validação de elegibilidade exige ANALYST e Alert IN_REVIEW;
+a criação inicial usa `IncidentStatus.OPEN`, sem simular uma transição de
+tratamento. Não há outra entidade Alert ou Investigation.
+
+- [models.py](../backend/app/incidents/models.py): Incident com UUID, vínculo
+  único ao Alert, analista responsável, Severity, Status e opened_at.
+- [schemas.py](../backend/app/incidents/schemas.py): corpo vazio de escalonamento
+  e resposta pública, sem permitir parâmetros de Severity, papel ou responsável.
+- [repository.py](../backend/app/incidents/repository.py): recuperação individual
+  e verificação de Incident existente para o Alert.
+- [service.py](../backend/app/incidents/service.py): coordenação da criação,
+  alteração do Alert e auditoria, sem commit próprio.
+- [router.py](../backend/app/incidents/router.py): escalonamento e consulta
+  individual com as dependências e fronteira transacional de Investigations.
+
+`POST /investigations/{investigation_id}/escalate` aceita corpo ausente ou JSON
+vazio e retorna 201 com id, alert_id, analyst_id, severity, status OPEN e
+opened_at. `GET /incidents/{incident_id}` recupera o registro com resposta 200.
+Somente ANALYST ativo pode acessar essas operações; ADMIN não herda acesso.
+Escrita exige Origin e CSRF, e campos adicionais são rejeitados.
+
+As escritas bloqueiam User e Alert na mesma ordem usada por False Positive.
+Após validar a Investigation e o estado, o serviço copia a Severity do Alert,
+registra o solicitante e o instante e acrescenta ALERT_ESCALATED com Status
+IN_REVIEW/ESCALATED. A auditoria compartilha o instante de abertura. Uma única
+transação confirma Incident, Alert e auditoria; falhas revertem o conjunto.
+
+A [migration 0008](../backend/migrations/versions/0008_create_incidents.py)
+sucede a 0007, sem modificar revisões existentes. Unicidade de alert_id garante
+um Incident por Alert no PostgreSQL; FKs RESTRICT preservam origem e autoria.
+O Status reutiliza IncidentStatus e sua Severity é armazenada independentemente
+de mudanças posteriores no Alert. Não há rotas de tratamento, resolução,
+listagem ou exclusão de Incidents.
+
+Identidade inválida/inativa retorna 401; papel ou Origin/CSRF inválidos, 403;
+referência inexistente, 404; estado incompatível ou duplicação, 409; entrada
+inválida, 422. Respostas protegidas não usam cache e erros não ecoam valores
+privados. Escalonamentos concorrentes e disputa com descarte confirmam apenas
+uma decisão, sem duplicar Incident ou Audit Log.
+
 ## Testes
 
 Com dependências instaladas, a partir de `backend/`:
@@ -69,3 +112,12 @@ python -m pytest tests/test_incident_transitions.py --cov=app.incidents.transiti
 
 Esses testes de domínio não precisam de PostgreSQL. Para executar a suíte
 completa e medir as metas geral e por módulo, utilize o [README](../README.md#testes-automatizados).
+
+Os testes de [escalonamento](../backend/tests/test_incident_escalation.py) e
+[concorrência](../backend/tests/test_escalation_concurrency.py) usam exclusivamente
+mini_soc_test e incluem persistência entre sessões, quatro Severities, estados
+inválidos, unicidade real, auditoria, rollback e disputa com False Positive:
+
+```powershell
+python -m pytest tests/test_incident_escalation.py tests/test_escalation_concurrency.py -q
+```

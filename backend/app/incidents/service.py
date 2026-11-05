@@ -1,0 +1,38 @@
+from datetime import datetime, timezone
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from app.audit.service import append_audit
+from app.incidents import repository
+from app.incidents.models import Incident
+from app.incidents.transitions import IncidentStatus
+from app.investigations import service as investigations
+from app.investigations.rules import InvestigationRuleError, validate_escalation_eligibility
+
+
+def escalate(db: Session, author_id: UUID, investigation_id: UUID) -> Incident:
+    author = investigations.authorize(db, author_id, lock=True)
+    _, alert = investigations.context(db, investigation_id, lock=True)
+    validate_escalation_eligibility(alert.status, actor_role=author.role.value)
+    if repository.exists_for_alert(db, alert.id):
+        raise InvestigationRuleError("Incident já existente.")
+    now = datetime.now(timezone.utc)
+    incident = Incident(alert_id=alert.id, analyst_id=author.id, severity=alert.severity,
+                        status=IncidentStatus.OPEN, opened_at=now)
+    db.add(incident)
+    old_status = alert.status
+    alert.status = "ESCALATED"
+    append_audit(db, author_id=author.id, action="ALERT_ESCALATED", entity_type="ALERT",
+                 entity_id=str(alert.id), old_status=old_status, new_status=alert.status,
+                 occurred_at=now)
+    db.flush()
+    return incident
+
+
+def get(db: Session, author_id: UUID, incident_id: UUID) -> Incident:
+    investigations.authorize(db, author_id)
+    incident = repository.get(db, incident_id)
+    if incident is None:
+        raise investigations.InvestigationServiceError("not_found")
+    return incident
