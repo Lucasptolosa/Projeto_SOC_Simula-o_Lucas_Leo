@@ -62,6 +62,10 @@ def test_incident_pages_authorize_on_server(web_context, incident_queries, path,
     assert "'unsafe-inline'" not in response.headers["content-security-policy"]
     if expected == 303:
         assert response.headers["location"] == "/login?reason=session"
+    if expected == 200:
+        assert response.context["is_analyst"] is True and response.context["is_admin"] is False
+        assert set(response.context) == {"request", "is_admin", "is_analyst", "page", "title"} | (
+            {"incident_id"} if path != "/app/incidents" else set())
     if expected != 200:
         assert 'id="incident-panel"' not in response.text
 

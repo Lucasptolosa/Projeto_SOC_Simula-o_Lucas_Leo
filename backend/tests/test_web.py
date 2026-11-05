@@ -207,7 +207,8 @@ def test_html_sem_segredos_e_contexto_minimo(web_context, caplog):
             assert secret not in response.text + caplog.text
         assert "password_hash" not in response.text
         assert "csrf_token" not in response.text
-    assert set(responses[0].context) == {"request", "is_admin", "page", "title"}
+    assert set(responses[0].context) == {"request", "is_admin", "is_analyst", "page", "title"}
+    assert responses[0].context["is_admin"] is True and responses[0].context["is_analyst"] is False
 
 
 def test_navegador_login_logout_cookies_csrf(web_context, web_page):
