@@ -348,6 +348,29 @@ tratamento, auditoria, rollback e concorrência. Usa commits reais em schema
 exclusivo de mini_soc_test e recupera um Incident por outra inicialização da
 aplicação em subprocesso, com sessão sintética transferida apenas em memória.
 
+### Benchmarks opt-in
+
+Os benchmarks em `tests/test_mvp_benchmarks.py` utilizam Uvicorn em uma porta
+loopback exclusiva, HTTP real, APIs existentes e schema descartável em mini_soc_test.
+Não são executados pela CI funcional. Na pasta backend, com banco de testes
+isolado configurado:
+
+```powershell
+$env:RUN_MVP_BENCHMARKS = "1"
+python -m pytest tests/test_mvp_benchmarks.py -s -q
+Remove-Item Env:RUN_MVP_BENCHMARKS
+```
+
+Ambos preparam 10.000 Logs, 500 Alerts e 100 Incidents por APIs antes da medição.
+RNF06 mede uma importação nova de 1.000 Logs sobre essa base. RNF05 mede
+100 consultas com cinco clientes sincronizados após autenticação; exige GET
+/alerts disponível. Os critérios temporais são verificados e os recursos
+observados são emitidos em stdout. Resultado verde de tempo não certifica o
+ambiente: aprovação de RNF05/RNF06 exige a referência de quatro núcleos e 8 GiB
+e sua verificação própria. Não versionar resultados nem executar contra bancos
+de desenvolvimento/produção. Preparação e login ficam fora da janela medida;
+cada medição inclui requisição HTTP e leitura completa da resposta.
+
 Os testes de integração usam exclusivamente `mini_soc_test`, com tabelas
 temporárias, schemas aleatórios e rollback. A verificação de concorrência de
 Logs confirma dados apenas em seu schema exclusivo e remove esse schema ao
