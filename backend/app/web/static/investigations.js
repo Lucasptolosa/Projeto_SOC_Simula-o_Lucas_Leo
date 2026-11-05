@@ -101,23 +101,34 @@ export function initInvestigations({request, write, notify, authError, savingCha
 
   async function mutate(path, payload, confirmed) {
     if (busy || saving || !ready) return;
+    let focusTarget = null;
     saving = true; savingChanged(true); controls();
     try {
       const result = await write(path, payload);
       ready = false; closeDialog();
       await confirmed(result);
+      if (identifier) focusTarget = document.querySelector(data.hidden ? "#feedback" : '[data-investigation-field="status"]');
     } catch (error) {
       if (error.status === 409) {
         closeDialog(); ready = false;
         const refreshed = identifier && await load();
         notify(refreshed ? "Conflito: estado atualizado. Revise antes de decidir."
           : "Conflito: consulte a Investigation existente antes de repetir a decisão.", true);
+        focusTarget = document.querySelector(refreshed ? '[data-investigation-field="status"]' : "#feedback");
       } else {
         if (error.status !== 422) { closeDialog(); ready = false; }
         else if (dialog?.open) document.querySelector("#dismiss-error").textContent = "Dados inválidos. Revise a justificativa.";
         await failure(error);
+        if (error.status !== 401 && error.status !== 403) focusTarget = error.status === 422 && dialog?.open
+          ? dismissal.elements.justification : document.querySelector("#feedback");
       }
-    } finally { saving = false; savingChanged(false); controls(); }
+    } finally {
+      saving = false; savingChanged(false); controls();
+      if (focusTarget) {
+        if (focusTarget.tagName !== "TEXTAREA") focusTarget.setAttribute("tabindex", "-1");
+        focusTarget.focus();
+      }
+    }
   }
 
   start?.addEventListener("submit", event => {
