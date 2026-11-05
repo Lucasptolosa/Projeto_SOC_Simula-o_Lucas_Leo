@@ -13,9 +13,12 @@
   let busy = false;
   let hasNext = false;
   let userManagement = null;
-  let incidentManagement = null;
+  let analystManagement = null;
   const incidentPage = page === "incidents" || page === "incident-detail";
+  const investigationPage = page === "investigations" || page === "investigation-detail";
+  const alertPage = page === "alerts" || page === "alert-detail";
   const importPage = page === "log-import";
+  const operationsPage = page === "operations";
 
   class ApiError extends Error {
     constructor(status, detail = null) { super("Falha na requisição"); this.status = status; this.detail = detail; }
@@ -54,7 +57,7 @@
   function returnToLogin(reason = "session") {
     csrf = null;
     userManagement?.close();
-    incidentManagement?.close();
+    analystManagement?.close();
     if (panel) panel.hidden = true;
     if (results) results.replaceChildren();
     window.location.replace(`/login?reason=${reason}`);
@@ -63,8 +66,8 @@
   function handleError(error) {
     if (error.status === 401) { returnToLogin(); return; }
     if (error.status === 403) {
-      incidentManagement?.close();
-      if (importPage) userManagement?.close();
+      analystManagement?.close();
+      if (importPage || operationsPage) userManagement?.close();
       notify("Acesso negado. Suas permissões podem ter mudado. Volte à visão geral.", true);
     } else if (error.status === 422) {
       notify("Parâmetros inválidos. Revise os filtros e tente novamente.", true);
@@ -205,14 +208,14 @@
     document.querySelector("#current-role").textContent = user.role;
     document.querySelectorAll("[data-admin]").forEach((element) => { element.hidden = user.role !== "ADMIN"; });
     document.querySelectorAll("[data-analyst]").forEach((element) => { element.hidden = user.role !== "ANALYST"; });
-    logout.disabled = Boolean(userManagement?.isSaving() || incidentManagement?.isSaving());
-    if ((panel || importPage) && user.role !== "ADMIN") {
+    logout.disabled = Boolean(userManagement?.isSaving() || analystManagement?.isSaving());
+    if ((panel || importPage || operationsPage) && user.role !== "ADMIN") {
       userManagement?.close();
       if (panel) panel.hidden = true;
       throw new ApiError(403);
     }
-    if (incidentPage && user.role !== "ANALYST") {
-      incidentManagement?.close();
+    if ((incidentPage || investigationPage || alertPage) && user.role !== "ANALYST") {
+      analystManagement?.close();
       throw new ApiError(403);
     }
     return user;
@@ -249,10 +252,12 @@
           savingChanged: (saving) => { logout.disabled = saving; setBusy(busy); },
         });
       }
-      if (incidentPage) {
-        if (!incidentManagement) {
-          const {initIncidents} = await import("/static/incidents.js");
-          incidentManagement = initIncidents({
+      if (incidentPage || investigationPage || alertPage) {
+        if (!analystManagement) {
+          const initialize = incidentPage ? (await import("/static/incidents.js")).initIncidents
+            : investigationPage ? (await import("/static/investigations.js")).initInvestigations
+            : (await import("/static/alerts.js")).initAlerts;
+          analystManagement = initialize({
             request, write, notify,
             authError: async (error) => {
               handleError(error);
@@ -261,7 +266,17 @@
             savingChanged: (saving) => { logout.disabled = saving; },
           });
         }
-        await incidentManagement.load();
+        await analystManagement.load();
+      }
+      if (operationsPage) {
+        if (!userManagement) {
+          const {initOperations} = await import("/static/operations.js");
+          userManagement = initOperations({
+            write, notify, authError: handleError,
+            savingChanged: (saving) => { logout.disabled = saving; },
+          });
+        }
+        userManagement.open();
       }
       if (panel) { panel.hidden = false; await loadRecords(); }
     } catch (error) { handleError(error); }
@@ -275,6 +290,12 @@
     } catch (error) { handleError(error); logout.disabled = false; }
   });
   retry.addEventListener("click", start);
+  document.querySelector("#log-filters")?.addEventListener("submit", event => {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    for (const [name, value] of new FormData(event.currentTarget)) if (value) params.set(name, value);
+    window.location.assign(`/app/logs?${params}`);
+  });
   document.querySelector("#user-filters")?.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!busy) { currentPage = 1; loadRecords(); }

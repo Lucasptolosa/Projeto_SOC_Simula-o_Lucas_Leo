@@ -1,14 +1,28 @@
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, get_args
+from urllib.parse import urlencode
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
+from app.alerts.schemas import AlertStatus, Severity
+from app.assets import repository as assets
+from app.assets.models import AssetStatus, AssetType
+from app.assets.schemas import PublicAsset
 from app.auth.authorization import require_roles
 from app.auth.dependencies import get_current_user
+from app.dashboard.service import summarize
+from app.db.session import get_session
+from app.detection import repository as detection
+from app.detection.schemas import PublicRule
+from app.logs import service as logs
+from app.logs.models import EventType
+from app.logs.schemas import LogsQuery
 from app.users.models import User, UserRole
 
 
@@ -37,14 +51,15 @@ router = APIRouter(route_class=PageRoute, include_in_schema=False)
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Administrator = Annotated[User, Depends(require_roles(UserRole.ADMIN))]
 Analyst = Annotated[User, Depends(require_roles(UserRole.ANALYST))]
+Database = Annotated[Session, Depends(get_session)]
 
 
-def render_page(request: Request, user: User, page: str, title: str, **context):
+def render_page(request: Request, user: User, page: str, title: str, *, status_code: int = 200, **context):
     # Contexto público mínimo
     return templates.TemplateResponse(request, page + ".html", {
         "is_admin": user.role == UserRole.ADMIN, "is_analyst": user.role == UserRole.ANALYST,
         "page": page, "title": title, **context,
-    })
+    }, status_code=status_code)
 
 
 @router.get("/")
@@ -77,11 +92,70 @@ def import_logs_page(request: Request, user: Administrator):
     return render_page(request, user, "log-import", "Importar Logs")
 
 
+@router.get("/app/operacoes")
+def operations_page(request: Request, user: Administrator, db: Database,
+                    index: Annotated[int, Query(alias="pagina", ge=1, le=10000)] = 1):
+    size = 20
+    rows = assets.page(db, (index - 1) * size, size + 1)
+    return render_page(
+        request, user, "operations", "Assets e regras",
+        assets=[PublicAsset.model_validate(row) for row in rows[:size]],
+        rules=[PublicRule.model_validate(row) for row in detection.rules(db, lock=False)],
+        types=list(AssetType), states=list(AssetStatus), index=index,
+        has_next=index < 10000 and len(rows) > size,
+    )
+
+
+@router.get("/app/logs")
+def logs_page(request: Request, user: CurrentUser, db: Database):
+    try:
+        query = LogsQuery.model_validate(dict(request.query_params))
+    except ValidationError:
+        return render_page(request, user, "logs", "Consultar Logs", status_code=422,
+                           filters={}, event_types=list(EventType), invalid=True)
+    try:
+        result = logs.list_logs(db, user.id, query)
+    except logs.LogQueryError as error:
+        raise HTTPException(401 if str(error) == "inactive_author" else 403) from None
+    filters = query.model_dump(mode="json", exclude_none=True)
+    previous = urlencode(filters | {"page": query.page - 1}) if query.page > 1 else None
+    has_next = query.page < 10000 and query.page * query.page_size < result["total"]
+    following = urlencode(filters | {"page": query.page + 1}) if has_next else None
+    return render_page(request, user, "logs", "Consultar Logs", filters=filters, event_types=list(EventType),
+                       result=result, previous=previous, following=following)
+
+
 @router.get("/app/incidents")
 def incidents_page(request: Request, user: Analyst):
     return render_page(request, user, "incidents", "Incidents")
 
 
+@router.get("/app/dashboard")
+def dashboard_page(request: Request, user: Analyst, db: Database):
+    return render_page(request, user, "dashboard", "Dashboard de segurança", counts=summarize(db))
+
+
 @router.get("/app/incidents/{incident_id}")
 def incident_page(request: Request, incident_id: UUID, user: Analyst):
     return render_page(request, user, "incident-detail", "Detalhe do Incident", incident_id=str(incident_id))
+
+
+@router.get("/app/investigations")
+def investigations_page(request: Request, user: Analyst, alert_id: UUID | None = None):
+    return render_page(request, user, "investigations", "Investigations", initial_alert_id=alert_id)
+
+
+@router.get("/app/alerts")
+def alerts_page(request: Request, user: Analyst):
+    return render_page(request, user, "alerts", "Alerts", severities=get_args(Severity), statuses=get_args(AlertStatus))
+
+
+@router.get("/app/alerts/{alert_id}")
+def alert_page(request: Request, alert_id: UUID, user: Analyst):
+    return render_page(request, user, "alert-detail", "Detalhe do Alert", alert_id=str(alert_id))
+
+
+@router.get("/app/investigations/{investigation_id}")
+def investigation_page(request: Request, investigation_id: UUID, user: Analyst):
+    return render_page(request, user, "investigation-detail", "Detalhe da Investigation",
+                       investigation_id=str(investigation_id))

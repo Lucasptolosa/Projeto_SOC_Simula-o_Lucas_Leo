@@ -1,0 +1,22 @@
+{% extends "shell.html" %}
+{% block content %}
+<p class="page-description"><a href="/app/alerts">← Voltar para Alerts</a></p>
+<section id="alerts-panel" class="panel incident-detail" data-alert-id="{{ alert_id }}" aria-label="Detalhe do Alert" hidden>
+  <div id="alert-data" hidden>
+    <dl class="incident-facts">
+      <div><dt>Alert (ID)</dt><dd class="identifier" data-alert-field="id"></dd></div>
+      <div><dt>Severity</dt><dd data-alert-field="severity"></dd></div>
+      <div><dt>Status</dt><dd data-alert-field="status"></dd></div>
+      <div><dt>Detection Rule</dt><dd data-alert-field="rule_id"></dd></div>
+      <div><dt>Asset (ID)</dt><dd class="identifier" data-alert-field="asset_id"></dd></div>
+      <div><dt>Usuário do evento</dt><dd class="incident-text" data-alert-field="username"></dd></div>
+      <div><dt>Criação</dt><dd><time data-alert-field="created_at"></time></dd></div>
+    </dl>
+    <p id="alert-links" class="incident-actions"></p>
+    <h2>Logs de evidência</h2>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Logs de evidência">
+      <table><thead><tr><th scope="col">Evento</th><th scope="col">Tipo</th><th scope="col">Usuário</th><th scope="col">Ocorrência</th></tr></thead><tbody id="alert-evidence"></tbody></table>
+    </div>
+  </div>
+</section>
+{% endblock %}

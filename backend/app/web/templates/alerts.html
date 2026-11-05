@@ -1,0 +1,18 @@
+{% extends "shell.html" %}
+{% block content %}
+<section id="alerts-panel" class="panel" aria-label="Consulta de Alerts" hidden>
+  <form id="alert-filters" class="incident-filters">
+    <div><label for="alert-status-filter">Status</label><select id="alert-status-filter" name="status"><option value="">Todos</option>{% for value in statuses %}<option>{{ value }}</option>{% endfor %}</select></div>
+    <div><label for="alert-severity-filter">Severity</label><select id="alert-severity-filter" name="severity"><option value="">Todas</option>{% for value in severities %}<option>{{ value }}</option>{% endfor %}</select></div>
+    <div><label for="alert-rule-filter">Detection Rule</label><select id="alert-rule-filter" name="rule_id"><option value="">Todas</option><option>DR01</option><option>DR02</option><option>DR03</option></select></div>
+    <div><label for="alert-asset-filter">Asset (UUID)</label><input id="alert-asset-filter" name="asset_id" type="text" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"></div>
+    <div><label for="alert-from">Criação inicial (horário local)</label><input id="alert-from" name="created_from" type="datetime-local"></div>
+    <div><label for="alert-to">Criação final (horário local)</label><input id="alert-to" name="created_to" type="datetime-local"></div>
+    <button class="primary" type="submit">Aplicar filtros</button>
+  </form>
+  <div class="table-scroll" tabindex="0" role="region" aria-label="Resultados de Alerts">
+    <table><thead><tr><th scope="col">Alert (ID)</th><th scope="col">Severity</th><th scope="col">Status</th><th scope="col">Detection Rule</th><th scope="col">Asset (ID)</th><th scope="col">Criação</th></tr></thead><tbody id="alerts-results"></tbody></table>
+  </div>
+  {% include "pagination.html" %}
+</section>
+{% endblock %}

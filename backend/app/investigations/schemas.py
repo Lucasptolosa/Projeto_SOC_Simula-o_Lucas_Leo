@@ -44,6 +44,10 @@ class PublicInvestigation(BaseModel):
     dismissed_at: datetime | None
 
 
+class InvestigationDetail(PublicInvestigation):
+    incident_id: UUID | None = None
+
+
 class PublicObservation(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID

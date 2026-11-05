@@ -205,10 +205,31 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
 | Consulta de Alerts | ANALYST usa `GET /alerts` com filtros e paginação e `GET /alerts/{id}` para dados e evidências ordenadas. |
 | Incidents | ANALYST consulta lista e detalhe em `/app/incidents`, aplica filtros e executa tratamento, contenção e resolução pelas APIs existentes. [Contratos e regras](docs/regras-transicao-incidentes.md). |
-| Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
+| Investigations | ANALYST acessa `/app/investigations` para iniciar pelo Alert, consultar observações, descartar False Positive ou escalonar pelas APIs existentes. [Contratos e API](docs/regras-investigacoes.md). |
 
-Dashboard permanece fora da interface disponível.
+O Dashboard de segurança em `/app/dashboard` e `GET /dashboard` é exclusivo de
+ANALYST. Os totais de Alerts e Incidents são calculados por Severity e Status no
+PostgreSQL, incluindo categorias com zero. Recarregar a página reflete as
+transições confirmadas. A consulta não altera registros nem cria auditoria.
+
+No menu ANALYST, acesse **Dashboard → Alerts** para filtrar registros e abrir
+evidências. Um Alert `NEW` abre o formulário de Investigation com o ID
+preenchido. O detalhe recupera as ligações persistidas para Investigation e
+Incident. A Investigation permite descarte com justificativa ou escalonamento
+para tratamento e resolução na área de Incidents.
+
+Para demonstrar o fluxo com dados sintéticos, configure `mini_soc_test`,
+instale Chromium via Playwright e execute `python -m pytest tests/test_web_alert_flow.py`
+na pasta `backend`. O teste cria os eventos, percorre as duas decisões no
+navegador e remove somente o schema descartável que preparou.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
+
+O menu **Assets e regras** (`/app/operacoes`) permite ao ADMIN cadastrar,
+editar e desativar Assets e alterar o estado do catálogo de Detection Rules.
+As mutações reutilizam as APIs administrativas e seus controles de Origin e
+CSRF. O menu **Consultar Logs** (`/app/logs`) está disponível para ADMIN e
+ANALYST, com filtros combinados e paginação. Datas de filtro exigem ISO 8601
+com fuso explícito, como `2026-11-05T12:00:00Z`.
 
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria
 `investigations` e `investigation_observations`, com vínculos aos Alerts e Users
@@ -375,6 +396,29 @@ incluindo cadastro de Asset, ingestão/detecção, Investigation, decisões,
 tratamento, auditoria, rollback e concorrência. Usa commits reais em schema
 exclusivo de mini_soc_test e recupera um Incident por outra inicialização da
 aplicação em subprocesso, com sessão sintética transferida apenas em memória.
+
+### Benchmarks opt-in
+
+Os benchmarks em `tests/test_mvp_benchmarks.py` utilizam Uvicorn em uma porta
+loopback exclusiva, HTTP real, APIs existentes e schema descartável em mini_soc_test.
+Não são executados pela CI funcional. Na pasta backend, com banco de testes
+isolado configurado:
+
+```powershell
+$env:RUN_MVP_BENCHMARKS = "1"
+python -m pytest tests/test_mvp_benchmarks.py -s -q
+Remove-Item Env:RUN_MVP_BENCHMARKS
+```
+
+Ambos preparam 10.000 Logs, 500 Alerts e 100 Incidents por APIs antes da medição.
+RNF06 mede uma importação nova de 1.000 Logs sobre essa base. RNF05 mede
+100 consultas com cinco clientes sincronizados após autenticação; exige GET
+/alerts disponível. Os critérios temporais são verificados e os recursos
+observados são emitidos em stdout. Resultado verde de tempo não certifica o
+ambiente: aprovação de RNF05/RNF06 exige a referência de quatro núcleos e 8 GiB
+e sua verificação própria. Não versionar resultados nem executar contra bancos
+de desenvolvimento/produção. Preparação e login ficam fora da janela medida;
+cada medição inclui requisição HTTP e leitura completa da resposta.
 
 Os testes de integração usam exclusivamente `mini_soc_test`, com tabelas
 temporárias, schemas aleatórios e rollback. A verificação de concorrência de
