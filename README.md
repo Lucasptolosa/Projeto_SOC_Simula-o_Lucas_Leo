@@ -349,6 +349,12 @@ No Linux, `python -m playwright install --with-deps chromium` também instala as
 bibliotecas do navegador. Para execução sem relatório de cobertura, use
 `python -m pytest -q`. Os testes seguem AAA (Arrange, Act, Assert).
 
+`python -m pytest tests/test_soc_flow.py -q` verifica o fluxo integrado por APIs,
+incluindo cadastro de Asset, ingestão/detecção, Investigation, decisões,
+tratamento, auditoria, rollback e concorrência. Usa commits reais em schema
+exclusivo de mini_soc_test e recupera um Incident por outra inicialização da
+aplicação em subprocesso, com sessão sintética transferida apenas em memória.
+
 Os testes de integração usam exclusivamente `mini_soc_test`, com tabelas
 temporárias, schemas aleatórios e rollback. A verificação de concorrência de
 Logs confirma dados apenas em seu schema exclusivo e remove esse schema ao
