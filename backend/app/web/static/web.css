@@ -134,6 +134,21 @@ time { font-size: .78rem; line-height: 1.7; }
 .deactivate-target { font-size: .9rem; overflow-wrap: anywhere; }
 .user-dialog[aria-busy="true"] .dialog-footer::before { content: "Salvando…"; align-self: center; color: var(--muted); font-size: .75rem; }
 @media (min-width: 1500px) { .content { padding: 48px 60px; } }
+.incident-filters > div { flex: 1 1 200px; min-width: 0; }
+.incident-filters input { width: 100%; min-width: 0; }
+.filter-help { flex-basis: 100%; margin: 0; font-size: .78rem; line-height: 1.6; }
+.incidents-table { min-width: 850px; }
+.incidents-table a { text-decoration: underline; text-underline-offset: 3px; }
+.incident-detail { padding: 24px; }
+.incident-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 0; }
+.incident-detail dt { font-size: .78rem; color: var(--muted); margin-bottom: 8px; }
+.incident-detail dd { margin: 0 0 18px; overflow-wrap: anywhere; }
+.incident-history { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 20px; }
+.incident-history h2 { font-size: 1.05rem; }
+.incident-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
+.incident-actions { display: flex; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--line); margin-top: 20px; padding-top: 20px; }
+#incident-text { width: 100%; resize: vertical; font: inherit; padding: 12px; border: 1px solid #b9c7ca; border-radius: 6px; }
+@media (max-width: 700px) { .incident-facts { grid-template-columns: 1fr; gap: 8px; } .incident-detail { padding: 18px; } }
 @media (max-width: 1000px) { .app-layout { grid-template-columns: 195px minmax(0, 1fr); } .content { padding: 30px 24px; } .topbar { padding: 18px 24px; } .breadcrumb { display: none; } .filters select { min-width: 150px; } .pagination { align-items: flex-start; } }
 @media (max-width: 700px) {
   .login-layout { grid-template-columns: 1fr; }

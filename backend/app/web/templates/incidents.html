@@ -1,0 +1,17 @@
+{% extends "shell.html" %}
+{% block content %}
+<p class="page-description">Fila por prioridade: CRITICAL, HIGH, MEDIUM e LOW. Na mesma Severity, a abertura mais antiga aparece primeiro.</p>
+<section id="incident-panel" class="panel" aria-label="Consulta de Incidents" aria-busy="true" hidden>
+  <form id="incident-filters" class="filters incident-filters">
+    <div><label for="incident-status-filter">Status</label><select id="incident-status-filter" name="status"><option value="">Todos os Status</option><option>OPEN</option><option>UNDER_INVESTIGATION</option><option>CONTAINED</option><option>RESOLVED</option></select></div>
+    <div><label for="incident-severity-filter">Severity</label><select id="incident-severity-filter" name="severity"><option value="">Todas as Severities</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></div>
+    <div><label for="incident-asset-filter">Asset (UUID)</label><input id="incident-asset-filter" name="asset_id" type="text" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" spellcheck="false"></div>
+    <div><label for="incident-from">Abertura inicial (horário local)</label><input id="incident-from" name="opened_from" type="datetime-local" step="1"></div>
+    <div><label for="incident-to">Abertura final (horário local)</label><input id="incident-to" name="opened_to" type="datetime-local" step="1"></div>
+    <button type="submit" class="primary">Aplicar filtros</button>
+    <p class="filter-help muted">Datas dos filtros usam o fuso deste navegador e são enviadas em UTC. Limites inclusivos. Os registros exibem o fuso retornado pela API.</p>
+  </form>
+  <div class="table-scroll" role="region" aria-label="Tabela de Incidents" tabindex="0"><table class="incidents-table"><caption class="sr-only">Incidents em ordem de prioridade</caption><thead><tr><th scope="col">Incident (ID)</th><th scope="col">Severity</th><th scope="col">Status</th><th scope="col">Abertura</th><th scope="col">Ação</th></tr></thead><tbody id="incident-results"></tbody></table></div>
+  {% include "pagination.html" %}
+</section>
+{% endblock %}

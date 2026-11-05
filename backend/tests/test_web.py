@@ -207,7 +207,8 @@ def test_html_sem_segredos_e_contexto_minimo(web_context, caplog):
             assert secret not in response.text + caplog.text
         assert "password_hash" not in response.text
         assert "csrf_token" not in response.text
-    assert set(responses[0].context) == {"request", "is_admin", "page", "title"}
+    assert set(responses[0].context) == {"request", "is_admin", "is_analyst", "page", "title"}
+    assert responses[0].context["is_admin"] is True and responses[0].context["is_analyst"] is False
 
 
 def test_navegador_login_logout_cookies_csrf(web_context, web_page):
@@ -314,7 +315,7 @@ def test_navegador_auditoria_ordem_dados_e_paginacao(web_context, web_page):
         assert original == list(db.scalars(select(AuditLog.id).order_by(AuditLog.id)))
 
 
-def test_navegador_analyst_sem_operacoes_ficticias(web_context, web_page):
+def test_navegador_analyst_acessa_incidents(web_context, web_page):
     # Arrange
     _, _, password, _ = web_context
     page, _, _ = web_page
@@ -324,7 +325,8 @@ def test_navegador_analyst_sem_operacoes_ficticias(web_context, web_page):
 
     # Assert
     expect(page.locator("#current-role")).to_have_text("ANALYST")
-    expect(page.get_by_text("Nenhuma consulta está disponível para ANALYST nesta entrega.")).to_be_visible()
+    expect(page.get_by_role("link", name="Incidents", exact=True)).to_be_visible()
+    expect(page.get_by_text("Consultar Incidents", exact=False)).to_be_visible()
     assert page.get_by_role("link", name="Usuários", exact=True).count() == 0
     assert page.get_by_role("link", name="Auditoria", exact=True).count() == 0
 

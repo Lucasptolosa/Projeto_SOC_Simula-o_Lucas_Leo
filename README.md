@@ -202,10 +202,10 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Logs | ADMIN importa por `POST /logs/import`; ADMIN e ANALYST consultam `GET /logs`, com filtros e paginação, preservando registros e evidências. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
-| Incidents | ANALYST consulta lista paginada por prioridade ou detalhe, escalona uma Investigation e executa tratamento, contenção e resolução. [Contratos e regras](docs/regras-transicao-incidentes.md). |
+| Incidents | ANALYST consulta lista e detalhe em `/app/incidents`, aplica filtros e executa tratamento, contenção e resolução pelas APIs existentes. [Contratos e regras](docs/regras-transicao-incidentes.md). |
 | Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
-Consulta geral de Alerts, Dashboard e interface web do ANALYST
+Consulta geral de Alerts e Dashboard
 não são expostos pela aplicação.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
@@ -233,6 +233,12 @@ transação, sem alterar o Alert ESCALATED ou suas evidências.
 A página `/app` exibe a identidade autenticada; as páginas administrativas são
 exclusivas de ADMIN. ADMIN não herda as permissões de ANALYST. Não há cadastro
 público, reset de senha ou reativação de contas pela API.
+
+ANALYST acessa `/app/incidents` pelo menu ou pela página inicial. A lista mantém
+a prioridade do backend e possui filtros e paginação. O detalhe permite as ações
+correspondentes ao estado atual, com CSRF, atualização após confirmação e
+tratamento de conflitos. Os contratos de datas e formulários estão no
+[guia de Incidents](docs/regras-transicao-incidentes.md#interface-web).
 
 Os contratos completos, incluindo limite de 1.024 bytes UTF-8 para `event_id`,
 Assets inativos, rejeições e regras de Users/Assets, estão na [spec](spec.md).

@@ -194,6 +194,49 @@ A consulta mantém no-store e não exige Origin/CSRF de escrita. Não faz commit
 altera estados, cria auditoria, executa detecção ou modifica evidências. Nenhuma
 migration, tabela ou infraestrutura de paginação adicional é necessária.
 
+## Interface web
+
+ANALYST ativo acessa `/app/incidents` e `/app/incidents/{incident_id}`. O menu
+e o cartão inicial apresentam Incidents somente para esse papel. ADMIN recebe
+403 nas páginas; sessão indisponível redireciona ao login. Ocultar ações no
+navegador não substitui as verificações das páginas e APIs no servidor.
+
+A listagem utiliza GET /incidents, preservando sua prioridade e Page, sem
+ordenação ou paginação local. Os filtros usam os mesmos parâmetros HTTP.
+Asset é informado como UUID; não há chamada a operações administrativas para
+obter Assets. O tamanho padrão é 20, com opções de 10, 20, 50 e 100 registros.
+
+Os campos de período usam horário local do navegador; JavaScript converte
+cada valor para ISO 8601 UTC com Z antes do envio. O fuso local deve ser
+considerado ao preencher esses campos. Os limites permanecem inclusivos.
+Datas de abertura, contenção e resolução são exibidas em ISO 8601, com o
+offset retornado pela API, preservando o instante e evitando conversão implícita
+na apresentação. Status e Severity são sempre textuais.
+
+O detalhe apresenta origem, responsável e instante da abertura, dados de
+contenção/resolução e ações correspondentes ao estado recebido. OPEN apresenta
+início do tratamento; UNDER_INVESTIGATION apresenta contenção ou resolução
+direta; CONTAINED apresenta resolução; RESOLVED apresenta somente consulta.
+Essa seleção é de apresentação; a API permanece responsável por validar a
+transição sob bloqueio e confirmar persistência e auditoria.
+
+Um único formulário solicita o texto pertinente para contenção ou resolução,
+sem truncamento ou normalização. Durante o envio, ações, formulário e logout
+ficam bloqueados. Após sucesso, a resposta confirmada atualiza o detalhe, o
+histórico e as ações. Nenhum estado é atualizado de forma otimista.
+
+HTTP 409 informa conflito e exige recuperar o estado atual antes de nova
+decisão. Se essa recuperação falhar, ações permanecem indisponíveis até uma
+leitura bem-sucedida. Falha operacional de escrita não provoca repetição
+automática: a interface solicita atualização antes de repetir. Erros 401/403
+removem o conteúdo protegido; 401 redireciona ao login, e 403 informa acesso
+negado e revalida o perfil. Detalhe inexistente informa 404 sem ações.
+
+Templates reutilizam o layout existente; incidents.js utiliza HTTP, cookies,
+CSRF e mensagens compartilhados de web.js. Nenhum token é gravado em storage.
+Conteúdo da API é inserido com textContent, sem HTML não confiável. As páginas
+preservam no-store e CSP existentes e não criam APIs, regras ou migrations.
+
 ## Testes
 
 Com dependências instaladas, a partir de `backend/`:
@@ -231,3 +274,10 @@ autorização, ausência de segredos e preservação das tabelas existentes:
 ```powershell
 python -m pytest tests/test_incident_queries.py -q
 ```
+
+Os [testes web](../backend/tests/test_web_incidents.py) utilizam Chromium real
+com transporte ASGI, PostgreSQL em mini_soc_test e os mesmos componentes de
+testes da administração. Cobrem páginas, navegação, filtros, datas, prioridade,
+paginação, tratamento, conflitos, sessão/CSRF, XSS e responsividade. A suíte
+completa também preserva as regressões administrativas; execução via ASGI não
+substitui validação de TLS/proxy ou de acessibilidade com leitor de tela.

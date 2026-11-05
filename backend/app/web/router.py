@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -35,12 +36,14 @@ class PageRoute(APIRoute):
 router = APIRouter(route_class=PageRoute, include_in_schema=False)
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Administrator = Annotated[User, Depends(require_roles(UserRole.ADMIN))]
+Analyst = Annotated[User, Depends(require_roles(UserRole.ANALYST))]
 
 
-def render_page(request: Request, user: User, page: str, title: str):
+def render_page(request: Request, user: User, page: str, title: str, **context):
     # Contexto público mínimo
     return templates.TemplateResponse(request, page + ".html", {
-        "is_admin": user.role == UserRole.ADMIN, "page": page, "title": title,
+        "is_admin": user.role == UserRole.ADMIN, "is_analyst": user.role == UserRole.ANALYST,
+        "page": page, "title": title, **context,
     })
 
 
@@ -67,3 +70,13 @@ def users_page(request: Request, user: Administrator):
 @router.get("/app/audit-logs")
 def audit_page(request: Request, user: Administrator):
     return render_page(request, user, "audit", "Registros de auditoria")
+
+
+@router.get("/app/incidents")
+def incidents_page(request: Request, user: Analyst):
+    return render_page(request, user, "incidents", "Incidents")
+
+
+@router.get("/app/incidents/{incident_id}")
+def incident_page(request: Request, incident_id: UUID, user: Analyst):
+    return render_page(request, user, "incident-detail", "Detalhe do Incident", incident_id=str(incident_id))
