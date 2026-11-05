@@ -131,7 +131,11 @@ app.dependency_overrides[get_auth_settings]=lambda:settings.model_copy(update={'
 with TestClient(app,base_url='https://testserver') as client:
     client.cookies.set(COOKIE_NAME,data['token'])
     response=client.get('/incidents/'+data['id'])
-    print(json.dumps({'http_status':response.status_code,'incident':response.json()}))
+    alert=client.get('/alerts/'+response.json()['alert_id'])
+    dashboard=client.get('/dashboard')
+    assert alert.status_code==dashboard.status_code==200
+    print(json.dumps({'http_status':response.status_code,'incident':response.json(),
+        'alert':alert.json(),'dashboard':dashboard.json()}))
 engine.dispose()
 '''
     restarted = subprocess.run([sys.executable, "-c", child],
@@ -152,6 +156,10 @@ engine.dispose()
     child_result = json.loads(restarted.stdout)
     assert child_result["http_status"] == 200 and child_result["incident"]["status"] == "RESOLVED"
     assert child_result["incident"]["opened_at"] == body["opened_at"]
+    assert child_result["alert"]["status"] == "ESCALATED"
+    assert [log["event_id"] for log in child_result["alert"]["related_logs"]] == [row[1] for row in evidence_ids]
+    assert child_result["dashboard"]["alerts"]["status"]["ESCALATED"] == 1
+    assert child_result["dashboard"]["incidents"]["status"]["RESOLVED"] == 1
     with session() as db:
         assert db.execute(select(LogRecord.event_id, LogRecord.occurred_at).order_by(LogRecord.event_id)).all() == original_logs
         assert [(row.alert_id, row.event_id, row.position) for row in db.scalars(select(AlertLog).order_by(AlertLog.position))] == evidence_ids
