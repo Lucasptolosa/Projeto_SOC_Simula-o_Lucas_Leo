@@ -13,6 +13,7 @@
       <a data-admin href="/app/audit-logs" {% if page == 'audit' %}aria-current="page"{% endif %}><span aria-hidden="true">≡</span> Auditoria</a>
       {% endif %}
       {% if is_analyst %}
+      <a data-analyst href="/app/dashboard" {% if page == 'dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
       <a data-analyst href="/app/investigations" {% if page in ['investigations', 'investigation-detail'] %}aria-current="page"{% endif %}><span aria-hidden="true">⌕</span> Investigations</a>
       <a data-analyst href="/app/incidents" {% if page in ['incidents', 'incident-detail'] %}aria-current="page"{% endif %}><span aria-hidden="true">◇</span> Incidents</a>
       {% endif %}

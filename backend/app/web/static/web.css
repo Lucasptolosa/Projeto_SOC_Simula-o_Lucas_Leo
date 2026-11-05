@@ -190,3 +190,6 @@ time { font-size: .78rem; line-height: 1.7; }
   .panel-heading > span { display: none; }
   .workspace-footer { padding: 18px 20px; }
 }
+.dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
+.dashboard-distribution th { overflow-wrap: anywhere; }
+.dashboard-distribution meter { display: block; width: 100%; min-width: 3rem; }

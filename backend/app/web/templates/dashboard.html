@@ -1,0 +1,26 @@
+{% extends "shell.html" %}
+{% macro distribution(title, key, values) %}
+<section class="panel" aria-labelledby="{{ key }}-title">
+  <h2 id="{{ key }}-title">{{ title }}</h2>
+  <table class="dashboard-distribution" id="{{ key }}">
+    <thead><tr><th scope="col">Categoria</th><th scope="col">Quantidade</th></tr></thead>
+    <tbody>
+      {% set total = values.values() | sum %}
+      {% for label, count in values.items() %}
+      <tr><th scope="row">{{ label }}</th><td>{{ count }} <meter aria-hidden="true" value="{{ count }}" max="{{ total or 1 }}"></meter></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endmacro %}
+{% block content %}
+<div data-analyst>
+  <p class="page-description">Totais dos registros confirmados. <a href="/app/dashboard">Atualizar Dashboard</a></p>
+  <div class="home-grid dashboard-grid">
+    {{ distribution("Alerts por Severity", "alert-severity", counts.alerts.severity) }}
+    {{ distribution("Alerts por Status", "alert-status", counts.alerts.status) }}
+    {{ distribution("Incidents por Severity", "incident-severity", counts.incidents.severity) }}
+    {{ distribution("Incidents por Status", "incident-status", counts.incidents.status) }}
+  </div>
+</div>
+{% endblock %}

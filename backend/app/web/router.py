@@ -6,9 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 
 from app.auth.authorization import require_roles
 from app.auth.dependencies import get_current_user
+from app.dashboard.service import summarize
+from app.db.session import get_session
 from app.users.models import User, UserRole
 
 
@@ -37,6 +40,7 @@ router = APIRouter(route_class=PageRoute, include_in_schema=False)
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Administrator = Annotated[User, Depends(require_roles(UserRole.ADMIN))]
 Analyst = Annotated[User, Depends(require_roles(UserRole.ANALYST))]
+Database = Annotated[Session, Depends(get_session)]
 
 
 def render_page(request: Request, user: User, page: str, title: str, **context):
@@ -80,6 +84,11 @@ def import_logs_page(request: Request, user: Administrator):
 @router.get("/app/incidents")
 def incidents_page(request: Request, user: Analyst):
     return render_page(request, user, "incidents", "Incidents")
+
+
+@router.get("/app/dashboard")
+def dashboard_page(request: Request, user: Analyst, db: Database):
+    return render_page(request, user, "dashboard", "Dashboard de segurança", counts=summarize(db))
 
 
 @router.get("/app/incidents/{incident_id}")
