@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.audit.service import append_audit
 from app.incidents import repository
 from app.incidents.models import Incident
-from app.incidents.schemas import TransitionInput
+from app.incidents.schemas import IncidentsQuery, TransitionInput
 from app.incidents.transitions import IncidentStatus, validate_transition
 from app.investigations import service as investigations
 from app.investigations.rules import InvestigationRuleError, validate_escalation_eligibility
@@ -37,6 +37,12 @@ def get(db: Session, author_id: UUID, incident_id: UUID) -> Incident:
     if incident is None:
         raise investigations.InvestigationServiceError("not_found")
     return incident
+
+
+def list_incidents(db: Session, author_id: UUID, params: IncidentsQuery) -> dict:
+    investigations.authorize(db, author_id)
+    total, rows = repository.list_incidents(db, **params.model_dump())
+    return dict(items=rows, total=total, page=params.page, page_size=params.page_size)
 
 
 def transition(db: Session, author_id: UUID, incident_id: UUID, payload: TransitionInput) -> Incident:
