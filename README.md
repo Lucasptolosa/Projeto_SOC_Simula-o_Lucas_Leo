@@ -201,11 +201,12 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Auditoria | ADMIN consulta `GET /audit-logs` e `/app/audit-logs`, em ordem recente primeiro. Não há operações de edição ou exclusão. |
 | Logs | ADMIN envia lotes JSON a `POST /logs/import`; validação e persistência com rejeição individual e unicidade de `event_id`. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
+| Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
 | Incidents | ANALYST escalona uma Investigation, consulta o Incident individual e executa tratamento, contenção e resolução com auditoria atômica. [Contratos e regras](docs/regras-transicao-incidentes.md). |
 | Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
-Consulta geral de Incidents, Logs e Alerts, administração
-de regras, Dashboard e interface web do ANALYST não são expostos pela aplicação.
+Consulta geral de Incidents, Logs e Alerts, Dashboard e interface web do ANALYST
+não são expostos pela aplicação.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria
@@ -279,6 +280,26 @@ paralelismo e o histórico pode crescer; testes funcionais não comprovam RNF06.
 Os [contratos de integração](spec.md#312-integração-da-importação-com-detection-engine)
 e o [guia dos componentes](docs/arquitetura-aplicacao.md) detalham ordenação,
 deduplicação, recuperação e limites arquiteturais.
+
+### Ativação e desativação de regras
+
+`PATCH /detection-rules/DR01` recebe, por exemplo, `{"status":"INACTIVE"}`.
+Exige ADMIN ativo, sessão, Origin e CSRF. A resposta HTTP 200 contém `id`,
+`status` e `severity`; não permite editar identificador, parâmetros ou Severity.
+Identificadores são DR01-DR03, sem conversão de caixa. Regra ausente retorna
+404; corpo inválido ou com campos adicionais, 422 genérico. Proteções de
+autenticação/autorização mantêm 401/403 e a resposta usa Cache-Control no-store.
+
+Repetir o estado atual retorna a regra sem nova auditoria. Mudança efetiva
+registra autor, ação ACTIVATED/DEACTIVATED, entidade DETECTION_RULE, identificador
+e instante usando a auditoria existente, na mesma transação da regra. Falhas
+revertem ambas. Não usa os campos old_role/new_role para registrar estado.
+
+A operação revalida e bloqueia o autor, depois usa a linha de estado do motor
+e bloqueia a regra, coordenando-se com a importação. Lotes posteriores ao commit
+usam o novo estado. Não limpa históricos, altera Alerts anteriores ou dispara
+detecção retroativa. Não cria tabelas, migrations, regras ou telas. Os contratos
+estão na seção 3.3 da spec; o guia técnico descreve os bloqueios compartilhados.
 
 ## Testes automatizados
 

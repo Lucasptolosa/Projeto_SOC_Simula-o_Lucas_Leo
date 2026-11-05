@@ -211,9 +211,29 @@ DR01-DR03 ACTIVE com Severity fixa e estado vazio; não avalia Logs existentes.
 Essa coordenação reduz paralelismo, e o histórico serializado cresce com os
 eventos. Alterações nos campos internos do motor exigem compatibilidade do
 formato e testes de recuperação. O [ADR-003](adr/03-estado-transacional-detection-engine.md)
-detalha a proposta e permanece pendente de revisão arquitetural. Não há API de
-administração de regras ou consulta de Alerts; geração não autoriza ADMIN a
-consultá-los. RNF03 completo e RNF06 exigem suas verificações específicas.
+detalha a proposta e permanece pendente de revisão arquitetural. A administração
+de regras é descrita abaixo; não há consulta geral de Alerts e a geração não
+autoriza ADMIN a consultá-los. RNF03 completo e RNF06 exigem verificações próprias.
+
+### Administração de regras
+
+[router.py](../backend/app/detection/router.py) recebe somente status na rota
+`PATCH /detection-rules/{rule_id}`, usando require_roles(ADMIN), Origin, CSRF e
+get_session existentes. [schemas.py](../backend/app/detection/schemas.py) rejeita
+campos extras e estados diferentes de ACTIVE/INACTIVE e projeta id/status/severity.
+O contrato HTTP, inclusive repetições sem efeito, está na seção 3.3 da spec.
+
+O serviço revalida o autor com bloqueio de sua linha, adquire o bloqueio do
+estado singleton existente e usa rule_by_id com FOR UPDATE/populate_existing.
+Essa ordem é compatível com a importação, que obtém o mesmo bloqueio antes de
+inserir Logs e ler o catálogo. Alteração e lote concorrentes observam o estado
+confirmado segundo a precedência desse bloqueio, sem mutex local por processo.
+
+Somente uma mudança efetiva chama append_audit com entidade DETECTION_RULE e
+ação DETECTION_RULE_ACTIVATED/DEACTIVATED. Regra e Audit Log usam a mesma sessão;
+o router valida a projeção e faz o único commit. Uma repetição não escreve outra
+auditoria. Ausência de catálogo ou estado não é reparada automaticamente.
+Não há nova migration, limpeza de histórico ou alteração dos algoritmos do motor.
 
 Os núcleos de [Incidents](regras-transicao-incidentes.md) e
 [Investigations](regras-investigacoes.md) continuam independentes de HTTP,
