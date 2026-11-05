@@ -314,7 +314,7 @@ def test_navegador_auditoria_ordem_dados_e_paginacao(web_context, web_page):
         assert original == list(db.scalars(select(AuditLog.id).order_by(AuditLog.id)))
 
 
-def test_navegador_analyst_sem_operacoes_ficticias(web_context, web_page):
+def test_navegador_analyst_acessa_incidents(web_context, web_page):
     # Arrange
     _, _, password, _ = web_context
     page, _, _ = web_page
@@ -324,7 +324,8 @@ def test_navegador_analyst_sem_operacoes_ficticias(web_context, web_page):
 
     # Assert
     expect(page.locator("#current-role")).to_have_text("ANALYST")
-    expect(page.get_by_text("Nenhuma consulta está disponível para ANALYST nesta entrega.")).to_be_visible()
+    expect(page.get_by_role("link", name="Incidents", exact=True)).to_be_visible()
+    expect(page.get_by_text("Consultar Incidents", exact=False)).to_be_visible()
     assert page.get_by_role("link", name="Usuários", exact=True).count() == 0
     assert page.get_by_role("link", name="Auditoria", exact=True).count() == 0
 

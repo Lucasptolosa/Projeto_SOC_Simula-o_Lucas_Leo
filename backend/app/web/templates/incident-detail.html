@@ -1,0 +1,27 @@
+{% extends "shell.html" %}
+{% block content %}
+<p class="page-description"><a href="/app/incidents">← Voltar para Incidents</a>. Datas exibidas com o fuso retornado pela API.</p>
+<section id="incident-panel" class="panel incident-detail" data-incident-id="{{ incident_id }}" aria-label="Detalhe do Incident" aria-busy="true" hidden>
+  <div id="incident-data" hidden>
+    <dl class="incident-facts">
+      <div><dt>Incident (ID)</dt><dd class="identifier" data-incident-field="id"></dd></div>
+      <div><dt>Alert de origem</dt><dd class="identifier" data-incident-field="alert_id"></dd></div>
+      <div><dt>Responsável pela abertura (ID)</dt><dd class="identifier" data-incident-field="analyst_id"></dd></div>
+      <div><dt>Severity</dt><dd data-incident-field="severity"></dd></div>
+      <div><dt>Status</dt><dd data-incident-field="status"></dd></div>
+      <div><dt>Abertura</dt><dd><time data-incident-field="opened_at"></time></dd></div>
+    </dl>
+    <section id="incident-containment" class="incident-history" hidden><h2>Contenção</h2><p class="incident-text" data-incident-field="containment_description"></p><dl><dt>Analista da contenção (ID)</dt><dd class="identifier" data-incident-field="contained_by"></dd><dt>Instante da contenção</dt><dd><time data-incident-field="contained_at"></time></dd></dl></section>
+    <section id="incident-resolution" class="incident-history" hidden><h2>Resolução</h2><p class="incident-text" data-incident-field="resolution_conclusion"></p><dl><dt>Analista da resolução (ID)</dt><dd class="identifier" data-incident-field="resolved_by"></dd><dt>Instante da resolução</dt><dd><time data-incident-field="resolved_at"></time></dd></dl></section>
+    <div id="incident-actions" class="incident-actions" aria-label="Ações do Incident"></div>
+  </div>
+</section>
+<dialog id="incident-dialog" class="user-dialog" aria-labelledby="incident-dialog-title" aria-describedby="incident-dialog-help">
+  <div class="dialog-heading"><h2 id="incident-dialog-title"></h2><p id="incident-dialog-help" class="muted">O texto será preservado com o analista e o instante da operação.</p></div>
+  <p id="incident-form-error" class="feedback error" role="alert"></p>
+  <form id="incident-transition-form">
+    <fieldset id="incident-transition-fields"><label id="incident-text-label" for="incident-text"></label><textarea id="incident-text" name="content" rows="6" required></textarea></fieldset>
+    <div class="dialog-footer"><button type="button" class="quiet dialog-cancel">Cancelar</button><button id="incident-save" type="submit" class="primary">Confirmar</button></div>
+  </form>
+</dialog>
+{% endblock %}

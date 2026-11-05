@@ -7,6 +7,8 @@
   <a class="home-card" href="/app/audit-logs"><span class="card-icon" aria-hidden="true">≡</span><h2>Registros de auditoria</h2><p>Acompanhe o histórico de operações, seus autores e as entidades afetadas.</p><span class="card-link">Consultar auditoria <span aria-hidden="true">→</span></span></a>
 </div>
 {% else %}
-<section class="panel analyst-note"><h2>Sua área de trabalho</h2><p>Nenhuma consulta está disponível para ANALYST nesta entrega.</p><p class="muted">Alerts e Investigations ainda não possuem interface neste ambiente.</p></section>
+<div class="home-grid" data-analyst>
+  <a class="home-card" href="/app/incidents"><span class="card-icon" aria-hidden="true">◇</span><h2>Incidents</h2><p>Consulte a fila por prioridade, aplique filtros e acompanhe contenção e resolução.</p><span class="card-link">Consultar Incidents <span aria-hidden="true">→</span></span></a>
+</div>
 {% endif %}
 {% endblock %}

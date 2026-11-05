@@ -13,6 +13,8 @@
   let busy = false;
   let hasNext = false;
   let userManagement = null;
+  let incidentManagement = null;
+  const incidentPage = page === "incidents" || page === "incident-detail";
 
   class ApiError extends Error {
     constructor(status, detail = null) { super("Falha na requisição"); this.status = status; this.detail = detail; }
@@ -41,9 +43,17 @@
     feedback.classList.toggle("error", error);
   }
 
+  function write(path, payload, method = "POST") {
+    return request(path, {
+      method, headers: {"Content-Type": "application/json", "X-CSRF-Token": csrf},
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+    });
+  }
+
   function returnToLogin(reason = "session") {
     csrf = null;
     userManagement?.close();
+    incidentManagement?.close();
     if (panel) panel.hidden = true;
     if (results) results.replaceChildren();
     window.location.replace(`/login?reason=${reason}`);
@@ -52,6 +62,7 @@
   function handleError(error) {
     if (error.status === 401) { returnToLogin(); return; }
     if (error.status === 403) {
+      incidentManagement?.close();
       notify("Acesso negado. Suas permissões podem ter mudado. Volte à visão geral.", true);
     } else if (error.status === 422) {
       notify("Parâmetros inválidos. Revise os filtros e tente novamente.", true);
@@ -191,10 +202,15 @@
     document.querySelector("#current-username").textContent = user.username;
     document.querySelector("#current-role").textContent = user.role;
     document.querySelectorAll("[data-admin]").forEach((element) => { element.hidden = user.role !== "ADMIN"; });
-    logout.disabled = Boolean(userManagement?.isSaving());
+    document.querySelectorAll("[data-analyst]").forEach((element) => { element.hidden = user.role !== "ANALYST"; });
+    logout.disabled = Boolean(userManagement?.isSaving() || incidentManagement?.isSaving());
     if (panel && user.role !== "ADMIN") {
       userManagement?.close();
       panel.hidden = true;
+      throw new ApiError(403);
+    }
+    if (incidentPage && user.role !== "ANALYST") {
+      incidentManagement?.close();
       throw new ApiError(403);
     }
     return user;
@@ -208,10 +224,7 @@
         const {initUserManagement} = await import("/static/user-management.js");
         userManagement = initUserManagement({
           user,
-          write: (path, payload, method = "POST") => request(path, {
-            method, headers: {"Content-Type": "application/json", "X-CSRF-Token": csrf},
-            body: payload === undefined ? undefined : JSON.stringify(payload),
-          }),
+          write,
           refresh: async () => { currentPage = 1; await loadRecords(); },
           authError: async (error) => {
             handleError(error);
@@ -219,6 +232,20 @@
           },
           savingChanged: (saving) => { logout.disabled = saving; setBusy(busy); },
         });
+      }
+      if (incidentPage) {
+        if (!incidentManagement) {
+          const {initIncidents} = await import("/static/incidents.js");
+          incidentManagement = initIncidents({
+            request, write, notify,
+            authError: async (error) => {
+              handleError(error);
+              if (error.status === 403) { try { await identify(); } catch (failure) { handleError(failure); } }
+            },
+            savingChanged: (saving) => { logout.disabled = saving; },
+          });
+        }
+        await incidentManagement.load();
       }
       if (panel) { panel.hidden = false; await loadRecords(); }
     } catch (error) { handleError(error); }
@@ -236,9 +263,9 @@
     event.preventDefault();
     if (!busy) { currentPage = 1; loadRecords(); }
   });
-  document.querySelector("#page-size")?.addEventListener("change", () => { currentPage = 1; loadRecords(); });
-  document.querySelector("#previous-page")?.addEventListener("click", () => { if (!busy && currentPage > 1) { currentPage--; loadRecords(); } });
-  document.querySelector("#next-page")?.addEventListener("click", () => { if (!busy && hasNext) { currentPage++; loadRecords(); } });
+  panel?.querySelector("#page-size")?.addEventListener("change", () => { currentPage = 1; loadRecords(); });
+  panel?.querySelector("#previous-page")?.addEventListener("click", () => { if (!busy && currentPage > 1) { currentPage--; loadRecords(); } });
+  panel?.querySelector("#next-page")?.addEventListener("click", () => { if (!busy && hasNext) { currentPage++; loadRecords(); } });
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) identify().catch(handleError);
   });

@@ -274,10 +274,24 @@ e não exige novas tabelas, campos ou migrations. Os parâmetros estão no
 ## Interface web e erros
 
 [Rotas web](../backend/app/web/router.py) fornecem login, área autenticada,
-gestão de Users e consulta de auditoria. Páginas protegidas redirecionam
+gestão de Users, consulta de auditoria e área de Incidents do ANALYST. Páginas protegidas redirecionam
 sessões inválidas ao login; APIs respondem 401. Papel incompatível recebe 403
 antes da construção da página. Templates não recebem o ORM User nem tokens
 de sessão; a identidade é consultada em `/auth/me`.
+
+`/app/incidents` e `/app/incidents/{id}` exigem ANALYST no servidor. Templates
+reutilizam shell, menu, cabeçalho e paginação, sem carregar entidades ORM. O
+módulo [incidents.js](../backend/app/web/static/incidents.js) recebe as funções
+de HTTP, escrita com CSRF, mensagens e revalidação de identidade de web.js;
+não duplica autenticação nem usa o painel administrativo. Os listeners de
+paginação administrativa ficam restritos ao seu painel.
+
+O navegador mantém a ordem recebida da API, envia filtros e páginas ao backend
+e usa textContent para dados e mensagens. A apresentação das ações depende
+do estado retornado, mas a autorização e as regras continuam no servidor.
+Escritas pendentes bloqueiam novos envios e logout. Conflitos 409 exigem leitura
+atualizada antes de outra decisão; falha de confirmação não repete a escrita
+automaticamente. Tokens permanecem apenas na memória da infraestrutura existente.
 
 Os [scripts locais](../backend/app/web/static) mantêm CSRF somente em memória,
 usam `textContent` para dados e não persistem tokens em localStorage ou URLs.
