@@ -17,6 +17,7 @@
   const incidentPage = page === "incidents" || page === "incident-detail";
   const investigationPage = page === "investigations" || page === "investigation-detail";
   const alertPage = page === "alerts" || page === "alert-detail";
+  const importPage = page === "log-import";
 
   class ApiError extends Error {
     constructor(status, detail = null) { super("Falha na requisição"); this.status = status; this.detail = detail; }
@@ -65,6 +66,7 @@
     if (error.status === 401) { returnToLogin(); return; }
     if (error.status === 403) {
       analystManagement?.close();
+      if (importPage) userManagement?.close();
       notify("Acesso negado. Suas permissões podem ter mudado. Volte à visão geral.", true);
     } else if (error.status === 422) {
       notify("Parâmetros inválidos. Revise os filtros e tente novamente.", true);
@@ -206,9 +208,9 @@
     document.querySelectorAll("[data-admin]").forEach((element) => { element.hidden = user.role !== "ADMIN"; });
     document.querySelectorAll("[data-analyst]").forEach((element) => { element.hidden = user.role !== "ANALYST"; });
     logout.disabled = Boolean(userManagement?.isSaving() || analystManagement?.isSaving());
-    if (panel && user.role !== "ADMIN") {
+    if ((panel || importPage) && user.role !== "ADMIN") {
       userManagement?.close();
-      panel.hidden = true;
+      if (panel) panel.hidden = true;
       throw new ApiError(403);
     }
     if ((incidentPage || investigationPage || alertPage) && user.role !== "ANALYST") {
@@ -222,6 +224,20 @@
     retry.hidden = true;
     try {
       const user = await identify();
+      if (importPage) {
+        if (!userManagement) {
+          const {initLogImport} = await import("/static/log-import.js");
+          userManagement = initLogImport({
+            write, notify,
+            authError: async (error) => {
+              handleError(error);
+              if (error.status === 403) { try { await identify(); } catch (failure) { handleError(failure); } }
+            },
+            savingChanged: (saving) => { logout.disabled = saving; },
+          });
+        }
+        userManagement.open();
+      }
       if (page === "users" && !userManagement) {
         const {initUserManagement} = await import("/static/user-management.js");
         userManagement = initUserManagement({

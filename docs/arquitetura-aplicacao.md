@@ -340,6 +340,13 @@ de Investigations. A tela de Alerts preenche a entrada com o UUID de origem.
 O detalhe reúne observações paginadas, decisões confirmadas e a ligação
 persistida para Incident quando disponível.
 
+`/app/logs/import` exige ADMIN no servidor e usa log-import.js para ler o arquivo
+local, validar JSON/lista/tamanho e enviar o conteúdo pelo write compartilhado.
+O módulo não valida registros individuais nem implementa detecção. A resposta
+mostra ingestão e detecção separadamente, com textContent e sem armazenar arquivo
+ou tokens. Leitura/envio pendentes bloqueiam duplicidade e logout; falha não
+dispara reenvio automático. Os testes Chromium utilizam lotes sintéticos.
+
 Os [scripts locais](../backend/app/web/static) mantêm CSRF somente em memória,
 usam `textContent` para dados e não persistem tokens em localStorage ou URLs.
 Jinja mantém escape de HTML. A aplicação define CSP restritiva, proteção

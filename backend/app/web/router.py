@@ -77,6 +77,11 @@ def audit_page(request: Request, user: Administrator):
     return render_page(request, user, "audit", "Registros de auditoria")
 
 
+@router.get("/app/logs/import")
+def import_logs_page(request: Request, user: Administrator):
+    return render_page(request, user, "log-import", "Importar Logs")
+
+
 @router.get("/app/incidents")
 def incidents_page(request: Request, user: Analyst):
     return render_page(request, user, "incidents", "Incidents")

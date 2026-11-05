@@ -8,6 +8,7 @@
       <a href="/app" {% if page == 'home' %}aria-current="page"{% endif %}><span aria-hidden="true">⌂</span> Visão geral</a>
       {% if is_admin %}
       <p class="nav-label">ADMINISTRAÇÃO</p>
+      <a data-admin href="/app/logs/import" {% if page == 'log-import' %}aria-current="page"{% endif %}><span aria-hidden="true">↑</span> Importar Logs</a>
       <a data-admin href="/app/users" {% if page == 'users' %}aria-current="page"{% endif %}><span aria-hidden="true">◫</span> Usuários</a>
       <a data-admin href="/app/audit-logs" {% if page == 'audit' %}aria-current="page"{% endif %}><span aria-hidden="true">≡</span> Auditoria</a>
       {% endif %}
