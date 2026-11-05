@@ -10,11 +10,13 @@
       <p class="nav-label">ADMINISTRAÇÃO</p>
       <a data-admin href="/app/logs/import" {% if page == 'log-import' %}aria-current="page"{% endif %}><span aria-hidden="true">↑</span> Importar Logs</a>
       <a data-admin href="/app/users" {% if page == 'users' %}aria-current="page"{% endif %}><span aria-hidden="true">◫</span> Usuários</a>
+      <a data-admin href="/app/operacoes" {% if page == 'operations' %}aria-current="page"{% endif %}>Assets e regras</a>
       <a data-admin href="/app/audit-logs" {% if page == 'audit' %}aria-current="page"{% endif %}><span aria-hidden="true">≡</span> Auditoria</a>
       {% endif %}
       {% if is_analyst %}
       <a data-analyst href="/app/incidents" {% if page in ['incidents', 'incident-detail'] %}aria-current="page"{% endif %}><span aria-hidden="true">◇</span> Incidents</a>
       {% endif %}
+      <a href="/app/logs" {% if page == 'logs' %}aria-current="page"{% endif %}>Consultar Logs</a>
     </nav>
     <div class="sidebar-note"><span class="small-dot" aria-hidden="true"></span> Projeto acadêmico<span>Monitoramento e segurança</span></div>
   </aside>

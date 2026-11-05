@@ -1,0 +1,54 @@
+{% extends "shell.html" %}
+{% macro options(values, current) %}
+  {% for value in values %}<option {% if value == current %}selected{% endif %}>{{ value }}</option>{% endfor %}
+{% endmacro %}
+{% block content %}
+<section id="operations-panel" hidden>
+  <section class="panel">
+    <h2>Cadastrar Asset</h2>
+    <form class="incident-filters" data-path="/assets" data-method="POST">
+      <div><label for="asset-name">Nome</label><input id="asset-name" name="name" required></div>
+      <div><label for="asset-type">Tipo</label><select id="asset-type" name="type">{{ options(types, none) }}</select></div>
+      <div><label for="asset-state">Estado</label><select id="asset-state" name="status">{{ options(states, 'ACTIVE') }}</select></div>
+      <button class="primary" type="submit">Cadastrar Asset</button>
+    </form>
+    <output id="operation-result" aria-live="polite"></output>
+    <p><a href="/app/operacoes?pagina={{ index }}">Atualizar Assets e regras</a></p>
+  </section>
+  <section class="panel" aria-labelledby="assets-title">
+    <h2 id="assets-title">Assets</h2>
+    {% for asset in assets %}
+    <div class="incident-history" data-asset-row>
+      <h3>{{ asset.name }}</h3>
+      <p class="identifier">{{ asset.id }} · <span data-record-status>{{ asset.status }}</span></p>
+      <form class="incident-filters" data-path="/assets/{{ asset.id }}" data-method="PATCH">
+        <div><label for="name-{{ asset.id }}">Nome do Asset</label><input id="name-{{ asset.id }}" name="name" value="{{ asset.name }}" required></div>
+        <div><label for="type-{{ asset.id }}">Tipo do Asset</label><select id="type-{{ asset.id }}" name="type">{{ options(types, asset.type) }}</select></div>
+        <button class="primary" type="submit">Salvar Asset</button>
+      </form>
+      <form data-path="/assets/{{ asset.id }}/deactivate" data-method="POST" data-deactivate>
+        <button class="quiet" type="submit" {% if asset.status == 'INACTIVE' %}disabled data-unavailable{% endif %}>Desativar Asset</button>
+      </form>
+    </div>
+    {% else %}<p>Nenhum Asset nesta página.</p>{% endfor %}
+    <nav class="pagination-controls" aria-label="Páginas de Assets">
+      <span>Página {{ index }}</span>
+      {% if index > 1 %}<a href="?pagina={{ index - 1 }}">Anterior</a>{% endif %}
+      {% if has_next %}<a href="?pagina={{ index + 1 }}">Próxima</a>{% endif %}
+    </nav>
+  </section>
+  <section class="panel" aria-labelledby="rules-title">
+    <h2 id="rules-title">Detection Rules</h2>
+    {% for rule in rules %}
+    <div class="incident-history" data-rule-row>
+      <h3>{{ rule.id }}</h3>
+      <p>Severity {{ rule.severity }} · <span data-record-status>{{ rule.status }}</span></p>
+      <form class="incident-filters" data-path="/detection-rules/{{ rule.id }}" data-method="PATCH">
+        <div><label for="state-{{ rule.id }}">Estado {{ rule.id }}</label><select id="state-{{ rule.id }}" name="status">{{ options(states, rule.status) }}</select></div>
+        <button class="primary" type="submit">Salvar {{ rule.id }}</button>
+      </form>
+    </div>
+    {% endfor %}
+  </section>
+</section>
+{% endblock %}

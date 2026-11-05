@@ -209,6 +209,13 @@ Consulta geral de Alerts e Dashboard
 não são expostos pela aplicação.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
+O menu **Assets e regras** (`/app/operacoes`) permite ao ADMIN cadastrar,
+editar e desativar Assets e alterar o estado do catálogo de Detection Rules.
+As mutações reutilizam as APIs administrativas e seus controles de Origin e
+CSRF. O menu **Consultar Logs** (`/app/logs`) está disponível para ADMIN e
+ANALYST, com filtros combinados e paginação. Datas de filtro exigem ISO 8601
+com fuso explícito, como `2026-11-05T12:00:00Z`.
+
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria
 `investigations` e `investigation_observations`, com vínculos aos Alerts e Users
 existentes. Acrescenta `old_status/new_status` aos Audit Logs, sem reutilizar
