@@ -263,6 +263,14 @@ e resolução conservam texto, autor e instante, sem sobrescrever a abertura ou 
 contenção anterior. A fronteira HTTP confirma Incident e Audit Log em um commit;
 falhas revertem ambos. Alert, Logs, evidências e observações não são alterados.
 
+`GET /incidents` reutiliza `Page`, `PaginationQuery` e `PublicIncident`.
+O schema valida filtros e intervalo de abertura com fuso; o serviço revalida
+ANALYST ativo; o repositório relaciona Incident a AlertRecord para filtrar Asset,
+conta resultados e aplica prioridade por Severity, opened_at e id antes da
+paginação SQL. A leitura não executa detecção, commit ou auditoria de mutação
+e não exige novas tabelas, campos ou migrations. Os parâmetros estão no
+[contrato de Incidents](regras-transicao-incidentes.md#consulta-paginada-e-prioridade).
+
 ## Interface web e erros
 
 [Rotas web](../backend/app/web/router.py) fornecem login, área autenticada,
