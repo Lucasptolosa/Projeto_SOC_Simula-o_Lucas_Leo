@@ -180,6 +180,7 @@ export function initIncidents({request, write, notify, authError, savingChanged}
 
   async function mutate(status, content) {
     if (saving || busy || !ready) return;
+    let focusTarget = null;
     const payload = {target_status: status};
     if (status === "CONTAINED") payload.containment_description = content;
     if (status === "RESOLVED") payload.resolution_conclusion = content;
@@ -191,25 +192,35 @@ export function initIncidents({request, write, notify, authError, savingChanged}
       closeDialog();
       renderDetail(item);
       notify(`Operação concluída. Novo Status: ${item.status}.`);
+      focusTarget = panel.querySelector('[data-incident-field="status"]');
     } catch (error) {
       if (error.status === 409) {
         closeDialog();
         const refreshed = await load();
         notify(refreshed ? "Conflito: o Incident foi alterado. Estado atualizado; revise antes de decidir."
           : "Conflito: não foi possível atualizar o estado. Use Tentar novamente antes de decidir.", true);
+        focusTarget = document.querySelector(refreshed ? '[data-incident-field="status"]' : "#feedback");
       } else if (error.status === 422 && dialog.open) {
         document.querySelector("#incident-form-error").textContent = "Dados inválidos. Revise o texto obrigatório.";
+        focusTarget = text;
       } else {
         closeDialog();
         ready = false;
         actions.replaceChildren();
         await failure(error);
-        if (error.status !== 401 && error.status !== 403) notify("Não foi possível confirmar a operação. Atualize o detalhe antes de repetir.", true);
+        if (error.status !== 401 && error.status !== 403) {
+          notify("Não foi possível confirmar a operação. Atualize o detalhe antes de repetir.", true);
+          focusTarget = document.querySelector("#feedback");
+        }
       }
     } finally {
       saving = false;
       savingChanged(false);
       controls();
+      if (focusTarget) {
+        if (focusTarget.id === "feedback") focusTarget.setAttribute("tabindex", "-1");
+        focusTarget.focus();
+      }
     }
   }
 

@@ -85,3 +85,14 @@ def incidents_page(request: Request, user: Analyst):
 @router.get("/app/incidents/{incident_id}")
 def incident_page(request: Request, incident_id: UUID, user: Analyst):
     return render_page(request, user, "incident-detail", "Detalhe do Incident", incident_id=str(incident_id))
+
+
+@router.get("/app/investigations")
+def investigations_page(request: Request, user: Analyst):
+    return render_page(request, user, "investigations", "Investigations")
+
+
+@router.get("/app/investigations/{investigation_id}")
+def investigation_page(request: Request, investigation_id: UUID, user: Analyst):
+    return render_page(request, user, "investigation-detail", "Detalhe da Investigation",
+                       investigation_id=str(investigation_id))

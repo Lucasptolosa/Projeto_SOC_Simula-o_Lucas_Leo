@@ -13,8 +13,9 @@
   let busy = false;
   let hasNext = false;
   let userManagement = null;
-  let incidentManagement = null;
+  let analystManagement = null;
   const incidentPage = page === "incidents" || page === "incident-detail";
+  const investigationPage = page === "investigations" || page === "investigation-detail";
   const importPage = page === "log-import";
 
   class ApiError extends Error {
@@ -54,7 +55,7 @@
   function returnToLogin(reason = "session") {
     csrf = null;
     userManagement?.close();
-    incidentManagement?.close();
+    analystManagement?.close();
     if (panel) panel.hidden = true;
     if (results) results.replaceChildren();
     window.location.replace(`/login?reason=${reason}`);
@@ -63,7 +64,7 @@
   function handleError(error) {
     if (error.status === 401) { returnToLogin(); return; }
     if (error.status === 403) {
-      incidentManagement?.close();
+      analystManagement?.close();
       if (importPage) userManagement?.close();
       notify("Acesso negado. Suas permissões podem ter mudado. Volte à visão geral.", true);
     } else if (error.status === 422) {
@@ -205,14 +206,14 @@
     document.querySelector("#current-role").textContent = user.role;
     document.querySelectorAll("[data-admin]").forEach((element) => { element.hidden = user.role !== "ADMIN"; });
     document.querySelectorAll("[data-analyst]").forEach((element) => { element.hidden = user.role !== "ANALYST"; });
-    logout.disabled = Boolean(userManagement?.isSaving() || incidentManagement?.isSaving());
+    logout.disabled = Boolean(userManagement?.isSaving() || analystManagement?.isSaving());
     if ((panel || importPage) && user.role !== "ADMIN") {
       userManagement?.close();
       if (panel) panel.hidden = true;
       throw new ApiError(403);
     }
-    if (incidentPage && user.role !== "ANALYST") {
-      incidentManagement?.close();
+    if ((incidentPage || investigationPage) && user.role !== "ANALYST") {
+      analystManagement?.close();
       throw new ApiError(403);
     }
     return user;
@@ -249,10 +250,11 @@
           savingChanged: (saving) => { logout.disabled = saving; setBusy(busy); },
         });
       }
-      if (incidentPage) {
-        if (!incidentManagement) {
-          const {initIncidents} = await import("/static/incidents.js");
-          incidentManagement = initIncidents({
+      if (incidentPage || investigationPage) {
+        if (!analystManagement) {
+          const module = await import(incidentPage ? "/static/incidents.js" : "/static/investigations.js");
+          const initialize = incidentPage ? module.initIncidents : module.initInvestigations;
+          analystManagement = initialize({
             request, write, notify,
             authError: async (error) => {
               handleError(error);
@@ -261,7 +263,7 @@
             savingChanged: (saving) => { logout.disabled = saving; },
           });
         }
-        await incidentManagement.load();
+        await analystManagement.load();
       }
       if (panel) { panel.hidden = false; await loadRecords(); }
     } catch (error) { handleError(error); }
