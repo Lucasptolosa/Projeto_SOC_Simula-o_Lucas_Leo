@@ -59,4 +59,6 @@ class PublicLog(BaseModel):
 
 
 class AlertDetail(PublicAlert):
+    investigation_id: UUID | None
+    incident_id: UUID | None
     related_logs: list[PublicLog]

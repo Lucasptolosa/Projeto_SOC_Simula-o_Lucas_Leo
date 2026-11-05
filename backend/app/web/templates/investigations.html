@@ -2,7 +2,7 @@
 {% block content %}
 <p class="page-description">Inicie pelo UUID de um Alert NEW ou recupere uma Investigation conhecida. As decisões são confirmadas pelo servidor.</p>
 <section id="investigation-panel" class="panel incident-detail" hidden>
-  <form id="start-investigation" class="investigation-form"><h2>Iniciar Investigation</h2><label for="start-alert-id">Alert NEW (UUID)</label><input id="start-alert-id" name="alert_id" type="text" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" required><button class="primary" type="submit">Iniciar investigação</button></form>
+  <form id="start-investigation" class="investigation-form"><h2>Iniciar Investigation</h2><label for="start-alert-id">Alert NEW (UUID)</label><input id="start-alert-id" name="alert_id" type="text" value="{{ initial_alert_id or '' }}" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" required><button class="primary" type="submit">Iniciar investigação</button></form>
   <form id="find-investigation" class="investigation-form"><h2>Consultar Investigation</h2><label for="find-investigation-id">Investigation (UUID)</label><input id="find-investigation-id" name="investigation_id" type="text" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" required><button class="quiet" type="submit">Consultar investigação</button></form>
 </section>
 {% endblock %}

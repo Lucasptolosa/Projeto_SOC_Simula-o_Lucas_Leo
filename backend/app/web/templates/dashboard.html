@@ -15,7 +15,7 @@
 {% endmacro %}
 {% block content %}
 <div data-analyst>
-  <p class="page-description">Totais dos registros confirmados. <a href="/app/dashboard">Atualizar Dashboard</a></p>
+  <p class="page-description">Totais dos registros confirmados. <a href="/app/alerts">Consultar Alerts</a> · <a href="/app/dashboard">Atualizar Dashboard</a></p>
   <div class="home-grid dashboard-grid">
     {{ distribution("Alerts por Severity", "alert-severity", counts.alerts.severity) }}
     {{ distribution("Alerts por Status", "alert-status", counts.alerts.status) }}

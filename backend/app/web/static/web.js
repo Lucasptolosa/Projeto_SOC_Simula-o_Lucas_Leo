@@ -16,6 +16,7 @@
   let analystManagement = null;
   const incidentPage = page === "incidents" || page === "incident-detail";
   const investigationPage = page === "investigations" || page === "investigation-detail";
+  const alertPage = page === "alerts" || page === "alert-detail";
 
   class ApiError extends Error {
     constructor(status, detail = null) { super("Falha na requisição"); this.status = status; this.detail = detail; }
@@ -210,7 +211,7 @@
       panel.hidden = true;
       throw new ApiError(403);
     }
-    if ((incidentPage || investigationPage) && user.role !== "ANALYST") {
+    if ((incidentPage || investigationPage || alertPage) && user.role !== "ANALYST") {
       analystManagement?.close();
       throw new ApiError(403);
     }
@@ -234,10 +235,11 @@
           savingChanged: (saving) => { logout.disabled = saving; setBusy(busy); },
         });
       }
-      if (incidentPage || investigationPage) {
+      if (incidentPage || investigationPage || alertPage) {
         if (!analystManagement) {
-          const module = await import(incidentPage ? "/static/incidents.js" : "/static/investigations.js");
-          const initialize = incidentPage ? module.initIncidents : module.initInvestigations;
+          const initialize = incidentPage ? (await import("/static/incidents.js")).initIncidents
+            : investigationPage ? (await import("/static/investigations.js")).initInvestigations
+            : (await import("/static/alerts.js")).initAlerts;
           analystManagement = initialize({
             request, write, notify,
             authError: async (error) => {

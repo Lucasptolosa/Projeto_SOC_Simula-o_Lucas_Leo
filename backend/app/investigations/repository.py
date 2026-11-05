@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.detection.models import AlertRecord
+from app.incidents.models import Incident
 from app.investigations.models import Investigation, Observation
 
 
@@ -22,6 +23,10 @@ def investigation(db: Session, investigation_id: UUID) -> Investigation | None:
 
 def investigation_exists(db: Session, alert_id: UUID) -> bool:
     return db.scalar(select(Investigation.id).where(Investigation.alert_id == alert_id)) is not None
+
+
+def incident_id(db: Session, alert_id: UUID) -> UUID | None:
+    return db.scalar(select(Incident.id).where(Incident.alert_id == alert_id))
 
 
 def observations(db: Session, investigation_id: UUID, page: int, page_size: int) -> dict:

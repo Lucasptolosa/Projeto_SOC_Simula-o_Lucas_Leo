@@ -3,6 +3,7 @@
 <p class="page-description"><a href="/app/investigations">← Voltar para Investigations</a>. Datas exibidas com o fuso retornado pela API.</p>
 <section id="investigation-panel" class="panel" data-investigation-id="{{ investigation_id }}" hidden>
   <div id="investigation-data" class="incident-detail" hidden>
+    <p><a id="investigation-alert-link">Abrir Alert de origem</a></p>
     <dl class="incident-facts"><div><dt>Investigation (ID)</dt><dd class="identifier" data-investigation-field="id"></dd></div><div><dt>Alert (ID)</dt><dd class="identifier" data-investigation-field="alert_id"></dd></div><div><dt>Responsável inicial (ID)</dt><dd class="identifier" data-investigation-field="analyst_id"></dd></div><div><dt>Status</dt><dd data-investigation-field="status"></dd></div><div><dt>Início</dt><dd><time data-investigation-field="started_at"></time></dd></div></dl>
     <section id="investigation-dismissal" class="incident-history" hidden><h2>False Positive</h2><p class="incident-text" data-investigation-field="justification"></p><dl><dt>Analista (ID)</dt><dd class="identifier" data-investigation-field="dismissed_by"></dd><dt>Instante</dt><dd><time data-investigation-field="dismissed_at"></time></dd></dl></section>
     <div id="investigation-decisions" class="incident-actions" hidden><button id="dismiss-investigation" class="quiet" type="button">Descartar False Positive</button><button id="escalate-investigation" class="primary" type="button">Escalonar para Incident</button></div>

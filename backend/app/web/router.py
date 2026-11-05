@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, get_args
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -8,6 +8,7 @@ from fastapi.routing import APIRoute
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.alerts.schemas import AlertStatus, Severity
 from app.auth.authorization import require_roles
 from app.auth.dependencies import get_current_user
 from app.dashboard.service import summarize
@@ -92,8 +93,18 @@ def incident_page(request: Request, incident_id: UUID, user: Analyst):
 
 
 @router.get("/app/investigations")
-def investigations_page(request: Request, user: Analyst):
-    return render_page(request, user, "investigations", "Investigations")
+def investigations_page(request: Request, user: Analyst, alert_id: UUID | None = None):
+    return render_page(request, user, "investigations", "Investigations", initial_alert_id=alert_id)
+
+
+@router.get("/app/alerts")
+def alerts_page(request: Request, user: Analyst):
+    return render_page(request, user, "alerts", "Alerts", severities=get_args(Severity), statuses=get_args(AlertStatus))
+
+
+@router.get("/app/alerts/{alert_id}")
+def alert_page(request: Request, alert_id: UUID, user: Analyst):
+    return render_page(request, user, "alert-detail", "Detalhe do Alert", alert_id=str(alert_id))
 
 
 @router.get("/app/investigations/{investigation_id}")
