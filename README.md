@@ -207,7 +207,10 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Incidents | ANALYST consulta lista e detalhe em `/app/incidents`, aplica filtros e executa tratamento, contenção e resolução pelas APIs existentes. [Contratos e regras](docs/regras-transicao-incidentes.md). |
 | Investigations | ANALYST acessa `/app/investigations` para iniciar pelo Alert, consultar observações, descartar False Positive ou escalonar pelas APIs existentes. [Contratos e API](docs/regras-investigacoes.md). |
 
-Dashboard permanece fora da interface disponível.
+O Dashboard de segurança em `/app/dashboard` e `GET /dashboard` é exclusivo de
+ANALYST. Os totais de Alerts e Incidents são calculados por Severity e Status no
+PostgreSQL, incluindo categorias com zero. Recarregar a página reflete as
+transições confirmadas. A consulta não altera registros nem cria auditoria.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria
