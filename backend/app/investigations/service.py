@@ -59,10 +59,13 @@ def start(db: Session, author_id: UUID, alert_id: UUID) -> dict:
     return public(row, alert.status)
 
 
-def get(db: Session, author_id: UUID, investigation_id: UUID) -> dict:
+def get(db: Session, author_id: UUID, investigation_id: UUID, *, include_incident: bool = False) -> dict:
     authorize(db, author_id)
     row, alert = context(db, investigation_id)
-    return public(row, alert.status)
+    result = public(row, alert.status)
+    if include_incident:
+        result["incident_id"] = repository.incident_id(db, row.alert_id) if alert.status == "ESCALATED" else None
+    return result
 
 
 def add_observation(db: Session, author_id: UUID, investigation_id: UUID, content: str) -> dict:
