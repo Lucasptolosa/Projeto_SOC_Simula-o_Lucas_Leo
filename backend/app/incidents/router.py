@@ -1,9 +1,11 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
+from app.core.pagination import Page
 from app.incidents import service
-from app.incidents.schemas import EscalationInput, PublicIncident, TransitionInput
+from app.incidents.schemas import EscalationInput, IncidentsQuery, PublicIncident, TransitionInput
 from app.incidents.transitions import IncidentTransitionError
 from app.investigations.router import Analyst, Database, run_operation
 
@@ -15,6 +17,11 @@ router = APIRouter(tags=["Incidents"])
 def escalate(investigation_id: UUID, author: Analyst, db: Database, payload: EscalationInput | None = None):
     return run_operation(db, lambda: service.escalate(db, author.id, investigation_id),
                          PublicIncident, commit=True)
+
+
+@router.get("/incidents", response_model=Page[PublicIncident])
+def list_incidents(params: Annotated[IncidentsQuery, Query()], author: Analyst, db: Database):
+    return run_operation(db, lambda: service.list_incidents(db, author.id, params), Page[PublicIncident])
 
 
 @router.get("/incidents/{incident_id}", response_model=PublicIncident)

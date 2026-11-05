@@ -1,4 +1,4 @@
-# Regras de transição de Incidents
+# Incidents: persistência, tratamento e consultas
 
 O núcleo de domínio valida as transições da seção 9 da [spec](../spec.md), incluindo
 RF12, RF13, RF14, RF33 e RN03. É independente de HTTP, persistência e autenticação;
@@ -93,7 +93,7 @@ A [migration 0008](../backend/migrations/versions/0008_create_incidents.py)
 sucede a 0007, sem modificar revisões existentes. Unicidade de alert_id garante
 um Incident por Alert no PostgreSQL; FKs RESTRICT preservam origem e autoria.
 O Status reutiliza IncidentStatus e sua Severity é armazenada independentemente
-de mudanças posteriores no Alert. Não há rotas de listagem ou exclusão de Incidents.
+de mudanças posteriores no Alert. Não há rotas de exclusão de Incidents.
 
 Identidade inválida/inativa retorna 401; papel ou Origin/CSRF inválidos, 403;
 referência inexistente, 404; estado incompatível ou duplicação, 409; entrada
@@ -150,6 +150,50 @@ Incident inexistente, 404; conflito de transição, 409; entrada inválida, 422.
 Falhas inesperadas retornam erro genérico sem payload ou segredos. A resposta
 de sucesso é validada antes do commit e não é devolvida se o commit falhar.
 
+## Consulta paginada e prioridade
+
+`GET /incidents` retorna 200 com `Page[PublicIncident]`: `items`, `total`,
+`page` e `page_size`. Reutiliza os mesmos campos públicos do detalhe, incluindo
+Status e Severity textuais, abertura e dados de contenção/resolução. Esses dados
+apoiam RNF07; a conformidade visual depende das telas, fora deste contrato HTTP.
+
+| Parâmetro | Tipo e contrato |
+|---|---|
+| `page` | Inteiro de 1 a 10.000; padrão 1. |
+| `page_size` | Inteiro de 1 a 100; padrão 20. |
+| `status` | OPEN, UNDER_INVESTIGATION, CONTAINED ou RESOLVED; opcional. |
+| `severity` | LOW, MEDIUM, HIGH ou CRITICAL; opcional. |
+| `asset_id` | UUID do Asset associado ao Alert de origem; opcional. |
+| `opened_from` | Data/hora ISO 8601 com fuso explícito; limite inferior inclusivo de opened_at. |
+| `opened_to` | Data/hora ISO 8601 com fuso explícito; limite superior inclusivo de opened_at. |
+
+Os limites temporais são opcionais e independentes. `Z` e offsets explícitos
+são aceitos; instantes equivalentes em fusos distintos têm a mesma semântica.
+Os limites podem ser iguais. Intervalo invertido, data sem fuso, timestamp
+numérico, UUID inválido, enum desconhecido, paginação fora dos limites ou
+parâmetro desconhecido retornam 422 genérico, sem ecoar entradas.
+
+Filtros presentes são aplicados conjuntamente; os omitidos não restringem.
+Asset inexistente retorna lista vazia. Um Asset INACTIVE continua associado
+ao histórico e pode ser consultado. Severity filtra o valor persistido no
+Incident, sem recalculá-lo pelo Alert ou pela regra. Não há cópia de asset_id
+na tabela de Incidents: a consulta utiliza a relação com AlertRecord.
+
+A ordem é fixa, conforme RF34 e RN06: CRITICAL, HIGH, MEDIUM e LOW; na mesma
+Severity, opened_at crescente; em empate completo, id crescente. O repositório
+aplica CASE, filtros e ORDER BY no PostgreSQL antes de LIMIT/OFFSET. A contagem
+usa os mesmos filtros e independe da página. Página além dos resultados retorna
+items vazio e mantém total. Em um conjunto estável, páginas não repetem registros;
+inclusões ou transições entre requisições podem deslocar resultados em paginação
+por offset, sem promessa de snapshot entre chamadas independentes.
+
+O schema estende `PaginationQuery`; o serviço revalida ANALYST ativo e monta
+o resultado; o router reutiliza `Page` e as dependências existentes. ADMIN não
+herda acesso. Identidade inválida/inativa retorna 401; papel incompatível, 403.
+A consulta mantém no-store e não exige Origin/CSRF de escrita. Não faz commit,
+altera estados, cria auditoria, executa detecção ou modifica evidências. Nenhuma
+migration, tabela ou infraestrutura de paginação adicional é necessária.
+
 ## Testes
 
 Com dependências instaladas, a partir de `backend/`:
@@ -178,4 +222,12 @@ persistidos na revisão anterior:
 
 ```powershell
 python -m pytest tests/test_incident_treatment.py tests/test_treatment_transactions.py -q
+```
+
+Os [testes de consulta](../backend/tests/test_incident_queries.py) verificam
+filtros, contagem, prioridade antes da paginação, empates, limites temporais,
+autorização, ausência de segredos e preservação das tabelas existentes:
+
+```powershell
+python -m pytest tests/test_incident_queries.py -q
 ```

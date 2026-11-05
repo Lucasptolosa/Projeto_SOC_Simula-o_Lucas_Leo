@@ -202,10 +202,10 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Logs | ADMIN importa por `POST /logs/import`; ADMIN e ANALYST consultam `GET /logs`, com filtros e paginação, preservando registros e evidências. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
-| Incidents | ANALYST escalona uma Investigation, consulta o Incident individual e executa tratamento, contenção e resolução com auditoria atômica. [Contratos e regras](docs/regras-transicao-incidentes.md). |
+| Incidents | ANALYST consulta lista paginada por prioridade ou detalhe, escalona uma Investigation e executa tratamento, contenção e resolução. [Contratos e regras](docs/regras-transicao-incidentes.md). |
 | Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
-Consulta geral de Incidents e Alerts, Dashboard e interface web do ANALYST
+Consulta geral de Alerts, Dashboard e interface web do ANALYST
 não são expostos pela aplicação.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 

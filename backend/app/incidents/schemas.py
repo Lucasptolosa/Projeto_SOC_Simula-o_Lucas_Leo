@@ -1,9 +1,34 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StrictStr, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, StrictStr, field_validator, model_validator
 
+from app.core.pagination import PaginationQuery
 from app.incidents.transitions import IncidentStatus
+
+
+class IncidentsQuery(PaginationQuery):
+    status: IncidentStatus | None = None
+    severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"] | None = None
+    asset_id: UUID | None = None
+    opened_from: AwareDatetime | None = None
+    opened_to: AwareDatetime | None = None
+
+    @field_validator("opened_from", "opened_to", mode="before")
+    @classmethod
+    def explicit_datetime(cls, value):
+        if isinstance(value, str):
+            return datetime.fromisoformat(value)
+        if value is None or isinstance(value, datetime):
+            return value
+        raise ValueError("Data/hora ISO 8601 com fuso obrigatório.")
+
+    @model_validator(mode="after")
+    def valid_interval(self):
+        if self.opened_from is not None and self.opened_to is not None and self.opened_from > self.opened_to:
+            raise ValueError("Intervalo inválido.")
+        return self
 
 
 class EscalationInput(BaseModel):
