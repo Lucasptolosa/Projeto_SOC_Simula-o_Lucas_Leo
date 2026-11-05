@@ -15,9 +15,11 @@ def lock_state(db: Session) -> DetectionState:
     return row
 
 
-def rules(db: Session) -> list[DetectionRuleRecord]:
-    return list(db.scalars(select(DetectionRuleRecord).order_by(DetectionRuleRecord.id)
-                           .with_for_update().execution_options(populate_existing=True)))
+def rules(db: Session, *, lock: bool = True) -> list[DetectionRuleRecord]:
+    query = select(DetectionRuleRecord).order_by(DetectionRuleRecord.id).execution_options(populate_existing=True)
+    if lock:
+        query = query.with_for_update()
+    return list(db.scalars(query))
 
 
 def rule_by_id(db: Session, rule_id: str) -> DetectionRuleRecord | None:
