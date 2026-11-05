@@ -113,6 +113,19 @@ def test_maximum_batch_is_sent_to_backend_validation(web_context, web_page):
     assert page.locator("#ingestion-rejections tr").count() == 1000
 
 
+def test_invalid_utf8_is_not_replaced_before_import(web_context, web_page):
+    # Arrange
+    page = open_import(web_context, web_page)
+    page.get_by_label("Arquivo JSON", exact=True).set_input_files({
+        "name": "synthetic.json", "mimeType": "application/json", "buffer": b'[{"event_id":"\xff"}]',
+    })
+    # Act
+    page.get_by_role("button", name="Importar Logs", exact=True).click()
+    # Assert
+    expect(page.locator("#feedback")).to_contain_text("Arquivo JSON inválido")
+    assert not any(method == "POST" and url.endswith("/logs/import") for method, url, _ in web_page[2])
+
+
 def test_duplicate_submission_blocked(web_context, web_page, log_context):
     # Arrange
     page = open_import(web_context, web_page)

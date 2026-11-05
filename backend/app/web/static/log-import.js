@@ -33,7 +33,10 @@ export function initLogImport({write, notify, authError, savingChanged}) {
     const selected = file.files[0];
     setSaving(true); clearResult(); notify("Validando arquivo…");
     let payload;
-    try { payload = JSON.parse(await selected.text()); }
+    try {
+      const text = new TextDecoder("utf-8", {fatal: true}).decode(await selected.arrayBuffer());
+      payload = JSON.parse(text);
+    }
     catch { notify("Arquivo JSON inválido. Revise o formato sem reenviar automaticamente.", true); setSaving(false); return; }
     if (!Array.isArray(payload) || payload.length < 1 || payload.length > 1000) {
       notify("O arquivo deve conter uma lista de 1 a 1.000 registros.", true); setSaving(false); return;
