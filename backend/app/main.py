@@ -8,7 +8,11 @@ from app.users.router import router as users_router
 from app.audit.router import router as audit_router
 from app.assets.router import router as assets_router
 from app.logs.router import router as logs_router
+<<<<<<< HEAD
 from app.detection.router import router as detection_rules_router
+=======
+from app.investigations.router import router as investigations_router
+>>>>>>> main
 from app.core.errors import server_error, validation_error
 from app.web.router import DIRECTORY, router as web_router
 
@@ -18,7 +22,11 @@ app.include_router(users_router)
 app.include_router(audit_router)
 app.include_router(assets_router)
 app.include_router(logs_router)
+<<<<<<< HEAD
 app.include_router(detection_rules_router)
+=======
+app.include_router(investigations_router)
+>>>>>>> main
 app.include_router(web_router)
 app.mount("/static", StaticFiles(directory=DIRECTORY / "static"), name="static")
 app.add_exception_handler(RequestValidationError, validation_error)
@@ -30,7 +38,11 @@ async def auth_no_cache(request, call_next):
         response = await call_next(request)
     except Exception as error:
         response = await server_error(request, error)
+<<<<<<< HEAD
     if request.url.path.startswith(("/auth/", "/users", "/audit-logs", "/assets", "/logs", "/detection-rules")):
+=======
+    if request.url.path.startswith(("/auth/", "/users", "/audit-logs", "/assets", "/logs", "/investigations")):
+>>>>>>> main
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     if request.url.path in {"/", "/login", "/app"} or request.url.path.startswith(("/app/", "/static/")):

@@ -16,6 +16,12 @@ class AuditLog(Base):
             "(old_role IS NULL AND new_role IS NULL) OR (old_role IS NOT NULL AND new_role IS NOT NULL)",
             name="ck_audit_logs_roles_pair",
         ),
+        CheckConstraint(
+            "(old_status IS NULL AND new_status IS NULL) OR "
+            "(old_status IS NOT NULL AND new_status IS NOT NULL AND old_status <> '' AND new_status <> '')",
+            name="ck_audit_logs_status_pair",
+        ),
+        CheckConstraint("old_role IS NULL OR old_status IS NULL", name="ck_audit_logs_change_kind"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -32,3 +38,5 @@ class AuditLog(Base):
     new_role: Mapped[UserRole | None] = mapped_column(
         Enum(UserRole, native_enum=False, create_constraint=True, validate_strings=True, name="ck_audit_logs_new_role"),
     )
+    old_status: Mapped[str | None] = mapped_column(Text)
+    new_status: Mapped[str | None] = mapped_column(Text)

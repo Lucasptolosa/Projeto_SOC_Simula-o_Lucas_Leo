@@ -25,12 +25,16 @@ não confirmam isoladamente partes de uma operação de negócio. A conexão usa
 READ COMMITTED, `pool_pre_ping`, timeout e ocultação de parâmetros SQL.
 
 As [migrations](../backend/migrations/versions) formam uma cadeia única:
-Users → sessões → Audit Logs → Assets → Logs → persistência de detecção.
+Users → sessões → Audit Logs → Assets → Logs → detecção → Investigations.
 A revisão `0006_detection_persistence` acrescenta catálogo, estado, Alerts e
 evidências. Os modelos são carregados pelo
 [ambiente Alembic](../backend/migrations/env.py) para compor a metadata comum.
 Papéis, estados e tipos são textos com constraints, sem enums nativos do
 PostgreSQL. Regras de domínio sem ORM não criam tabelas.
+
+A revisão `0007_create_investigations` cria as investigações e observações e
+estende Audit Logs com campos próprios de Status, preservando as revisões e
+os registros existentes.
 
 ## Identidade, sessões e autorização
 
@@ -83,8 +87,12 @@ quando aplicáveis. A FK do autor impede exclusão que invalide o histórico.
 Os dois campos de papel ficam simultaneamente nulos ou contêm ADMIN/ANALYST.
 Eles não representam mudanças de Status de Alerts ou Incidents.
 
+`old_status/new_status` registram mudanças de Status em um par próprio,
+simultaneamente nulo ou preenchido. Constraints impedem pares incompletos,
+valores vazios ou mistura com mudança de papel no mesmo registro.
+
 [append_audit](../backend/app/audit/service.py) adiciona o registro à mesma
-sessão da alteração de User ou Asset, sem commit próprio. Falha em qualquer
+sessão da alteração de User, Asset ou descarte de Alert, sem commit próprio. Falha em qualquer
 gravação reverte a operação completa. Alteração conjunta de nome e papel gera
 um registro. Consultas não produzem auditoria de alteração.
 
@@ -219,11 +227,18 @@ o router valida a projeção e faz o único commit. Uma repetição não escreve
 auditoria. Ausência de catálogo ou estado não é reparada automaticamente.
 Não há nova migration, limpeza de histórico ou alteração dos algoritmos do motor.
 
-[Incidents](regras-transicao-incidentes.md) e
-[Investigations](regras-investigacoes.md) são validadores independentes de
-HTTP, ORM e do motor. Seus contratos não criam entidades, rotas ou transações.
-A integração persistente deve preservar autoria, horário, evidências,
-concorrência e auditoria previstos na spec.
+Os núcleos de [Incidents](regras-transicao-incidentes.md) e
+[Investigations](regras-investigacoes.md) continuam independentes de HTTP,
+ORM e do motor. A camada de aplicação de Investigations reutiliza os
+validadores de início e falso positivo sobre o mesmo `AlertRecord`.
+
+Investigation possui relação única com Alert e registra autor/instante de início.
+Cada observação possui autor, conteúdo e instante próprios. Descarte preserva
+justificativa, autor e instante e grava um Audit Log com Status anterior/novo.
+As escritas bloqueiam o User para revalidar papel/estado e depois o Alert para
+serializar decisões; o router confirma ou reverte toda a operação. Não há
+restrição de autoria exclusiva ao analista inicial. Escalonamento e persistência
+de Incidents permanecem separados; elegibilidade não cria Incident.
 
 ## Interface web e erros
 
