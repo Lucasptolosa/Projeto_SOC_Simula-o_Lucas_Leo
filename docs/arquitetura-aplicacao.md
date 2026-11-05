@@ -157,6 +157,24 @@ python -m pytest tests/test_log_validation.py tests/test_logs.py tests/test_user
 Os testes cobrem limites em bytes, multibyte, NUL, UTF-8 inválido, lotes mistos,
 constraint real, unicidade entre conexões, commit, rollback e autorização.
 
+### Consulta geral de Logs
+
+O router de Logs existente oferece GET /logs para ADMIN e ANALYST ativos,
+reutilizando require_roles/get_session e o tratamento compartilhado de erros
+e cache. LogsQuery estende PaginationQuery e reutiliza validações de texto/data
+de LogInput; Page[LogInput] projeta os cinco campos públicos já existentes.
+Não há outro ORM, esquema de evidências ou formato de entidade duplicado.
+
+O serviço revalida o autor com current_user/populate_existing e delega a leitura
+ao repositório do próprio módulo. Os filtros são predicados parametrizados
+aplicados à contagem e aos itens; username usa igualdade e o período filtra
+occurred_at, com limites inclusivos. A ordenação usa occurred_at DESC/event_id ASC.
+
+Não há locks do motor, DML, commit ou avaliação de regras nessa operação.
+Contagem e itens são SELECTs em READ COMMITTED, sem snapshot entre páginas.
+Importação e consulta têm permissões próprias: escrita só ADMIN, leitura também
+ANALYST. A seção 3.1.3 da spec define o contrato HTTP e seus limites.
+
 ## Detection Engine e domínio
 
 O [Detection Engine](../backend/app/detection_engine.py) é Python em memória,

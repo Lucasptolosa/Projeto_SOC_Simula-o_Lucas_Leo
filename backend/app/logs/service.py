@@ -4,7 +4,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.logs import repository
-from app.logs.schemas import ImportSummary, LogInput, RejectedLog
+from app.logs.schemas import ImportSummary, LogInput, LogsQuery, RejectedLog
 from app.users import repository as user_repository
 from app.users.models import UserRole, UserStatus
 from app.detection import service as detection_service
@@ -12,6 +12,19 @@ from app.detection import service as detection_service
 
 class LogImportError(ValueError):
     pass
+
+
+class LogQueryError(ValueError):
+    pass
+
+
+def list_logs(db: Session, author_id: UUID, params: LogsQuery) -> dict:
+    author = user_repository.current_user(db, author_id)
+    if author is None or author.status is not UserStatus.ACTIVE:
+        raise LogQueryError("inactive_author")
+    if author.role not in {UserRole.ADMIN, UserRole.ANALYST}:
+        raise LogQueryError("forbidden_author")
+    return repository.list_logs(db, params)
 
 
 def authorize_import(db: Session, author_id: UUID) -> None:

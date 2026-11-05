@@ -199,13 +199,13 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Users | ADMIN cadastra, altera e desativa contas; `GET /users` fornece paginação e filtros de papel/estado. A interface está em `/app/users`. |
 | Assets | ADMIN usa `POST /assets`, `PATCH /assets/{id}` e `POST /assets/{id}/deactivate`; alterações efetivas geram auditoria atômica. |
 | Auditoria | ADMIN consulta `GET /audit-logs` e `/app/audit-logs`, em ordem recente primeiro. Não há operações de edição ou exclusão. |
-| Logs | ADMIN envia lotes JSON a `POST /logs/import`; validação e persistência com rejeição individual e unicidade de `event_id`. |
+| Logs | ADMIN importa por `POST /logs/import`; ADMIN e ANALYST consultam `GET /logs`, com filtros e paginação, preservando registros e evidências. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
 | Incidents | ANALYST consulta lista paginada por prioridade ou detalhe, escalona uma Investigation e executa tratamento, contenção e resolução. [Contratos e regras](docs/regras-transicao-incidentes.md). |
 | Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
-Consulta geral de Logs e Alerts, Dashboard e interface web do ANALYST
+Consulta geral de Alerts, Dashboard e interface web do ANALYST
 não são expostos pela aplicação.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
@@ -280,6 +280,25 @@ paralelismo e o histórico pode crescer; testes funcionais não comprovam RNF06.
 Os [contratos de integração](spec.md#312-integração-da-importação-com-detection-engine)
 e o [guia dos componentes](docs/arquitetura-aplicacao.md) detalham ordenação,
 deduplicação, recuperação e limites arquiteturais.
+
+### Consulta de Logs
+
+`GET /logs` exige sessão de ADMIN ou ANALYST ativo, sem Origin/CSRF de escrita.
+A resposta 200 contém items/total/page/page_size. Reutiliza os cinco campos do
+Log e a paginação compartilhada: padrões 1/20, limites 10.000/100. A ordem é
+occurred_at DESC/event_id ASC. Nenhum novo modelo persistente ou migration é criado.
+
+Os filtros asset_id/event_type/username/occurred_from/occurred_to se combinam
+por AND. Username usa igualdade exata, preservando caixa e espaços. Datas são
+ISO 8601 com offset, limites inclusivos e independentes; início posterior ao fim
+é inválido. Eventos históricos e Assets inativos não são excluídos da consulta.
+
+Filtros sem resultados ou página além dos registros retornam lista vazia.
+Entradas/parâmetros desconhecidos ou inválidos retornam 422 genérico; sessão
+inválida/inativa, 401; papel incompatível, 403. Respostas usam no-store. A consulta
+não grava dados, confirma transações ou chama o motor. O contrato está na seção
+3.1.3 da spec; contagem e itens são leituras READ COMMITTED separadas, sem snapshot
+de navegação entre páginas. A importação mantém seus contratos e permissões.
 
 ### Ativação e desativação de regras
 
