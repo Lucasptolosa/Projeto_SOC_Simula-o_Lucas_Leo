@@ -311,6 +311,13 @@ Escritas pendentes bloqueiam novos envios e logout. Conflitos 409 exigem leitura
 atualizada antes de outra decisão; falha de confirmação não repete a escrita
 automaticamente. Tokens permanecem apenas na memória da infraestrutura existente.
 
+`/app/logs/import` exige ADMIN no servidor e usa log-import.js para ler o arquivo
+local, validar JSON/lista/tamanho e enviar o conteúdo pelo write compartilhado.
+O módulo não valida registros individuais nem implementa detecção. A resposta
+mostra ingestão e detecção separadamente, com textContent e sem armazenar arquivo
+ou tokens. Leitura/envio pendentes bloqueiam duplicidade e logout; falha não
+dispara reenvio automático. Os testes Chromium utilizam lotes sintéticos.
+
 Os [scripts locais](../backend/app/web/static) mantêm CSRF somente em memória,
 usam `textContent` para dados e não persistem tokens em localStorage ou URLs.
 Jinja mantém escape de HTML. A aplicação define CSP restritiva, proteção

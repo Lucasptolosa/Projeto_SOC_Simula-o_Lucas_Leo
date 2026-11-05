@@ -199,7 +199,7 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Users | ADMIN cadastra, altera e desativa contas; `GET /users` fornece paginação e filtros de papel/estado. A interface está em `/app/users`. |
 | Assets | ADMIN usa `POST /assets`, `PATCH /assets/{id}` e `POST /assets/{id}/deactivate`; alterações efetivas geram auditoria atômica. |
 | Auditoria | ADMIN consulta `GET /audit-logs` e `/app/audit-logs`, em ordem recente primeiro. Não há operações de edição ou exclusão. |
-| Logs | ADMIN importa por `POST /logs/import`; ADMIN e ANALYST consultam `GET /logs`, com filtros e paginação, preservando registros e evidências. |
+| Logs | ADMIN importa em `/app/logs/import` usando a API existente; ADMIN e ANALYST consultam `GET /logs`, com filtros e paginação. |
 | Detecção persistente | A importação avalia DR01-DR03; grava Alerts, evidências e estado transacional, com continuidade entre lotes e reinícios. |
 | Administração de regras | ADMIN usa `PATCH /detection-rules/{rule_id}` com `status` ACTIVE/INACTIVE; alteração efetiva e auditoria são atômicas. |
 | Incidents | ANALYST consulta lista e detalhe em `/app/incidents`, aplica filtros e executa tratamento, contenção e resolução pelas APIs existentes. [Contratos e regras](docs/regras-transicao-incidentes.md). |
@@ -288,6 +288,13 @@ e o [guia dos componentes](docs/arquitetura-aplicacao.md) detalham ordenação,
 deduplicação, recuperação e limites arquiteturais.
 
 ### Consulta de Logs
+
+ADMIN pode selecionar um JSON em `/app/logs/import`. A interface verifica lista
+e tamanho de 1 a 1.000 itens, enquanto a API mantém a validação de cada registro.
+O resultado separa aceitos/rejeitados de ingestão, posições e motivos, avaliados
+e rejeitados de detecção e Alerts criados. O arquivo não é armazenado separadamente.
+Escritas pendentes bloqueiam duplicidade; falha de confirmação exige verificar
+os registros antes de reenviar, sem repetição automática.
 
 `GET /logs` exige sessão de ADMIN ou ANALYST ativo, sem Origin/CSRF de escrita.
 A resposta 200 contém items/total/page/page_size. Reutiliza os cinco campos do
