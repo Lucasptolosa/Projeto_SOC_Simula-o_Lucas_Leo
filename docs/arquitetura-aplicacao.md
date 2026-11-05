@@ -40,6 +40,10 @@ A revisão `0008_create_incidents` acrescenta Incidents com vínculo único ao
 Alert, responsável, Severity herdada, Status e instante de abertura. Não altera
 as revisões anteriores ou as entidades de Alert/Investigation.
 
+A revisão `0009_incident_treatment` adiciona texto, autor e instante de
+contenção/resolução ao Incident existente. Campos anuláveis preservam os registros
+anteriores; FKs e constraints mantêm os três dados de cada operação em conjunto.
+
 ## Identidade, sessões e autorização
 
 [Autenticação](../backend/app/auth/service.py) verifica hashes Argon2id e cria
@@ -229,8 +233,15 @@ copiando a Severity e alterando o Alert para ESCALATED. `ALERT_ESCALATED` regist
 autor, Alert, Status anterior/novo e o mesmo instante da abertura. Unicidade
 por Alert e o lock compartilhado impedem duplicação e decisões concorrentes
 com False Positive. Incident, Alert e auditoria são confirmados ou revertidos
-juntos pela fronteira transacional existente. Os validadores de tratamento
-permanecem separados, sem rotas de execução dessas transições.
+juntos pela fronteira transacional existente.
+
+Tratamento utiliza `POST /incidents/{id}/transitions`: a API valida campos e
+textos; o repositório bloqueia e atualiza a entidade carregada; o serviço invoca
+`validate_transition()` e grava `INCIDENT_STATUS_CHANGED` com os estados próprios.
+A ordem User → Incident revalida o autor antes do estado persistido. Contenção
+e resolução conservam texto, autor e instante, sem sobrescrever a abertura ou a
+contenção anterior. A fronteira HTTP confirma Incident e Audit Log em um commit;
+falhas revertem ambos. Alert, Logs, evidências e observações não são alterados.
 
 ## Interface web e erros
 

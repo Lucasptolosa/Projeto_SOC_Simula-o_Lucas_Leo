@@ -1,9 +1,10 @@
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.incidents import service
-from app.incidents.schemas import EscalationInput, PublicIncident
+from app.incidents.schemas import EscalationInput, PublicIncident, TransitionInput
+from app.incidents.transitions import IncidentTransitionError
 from app.investigations.router import Analyst, Database, run_operation
 
 
@@ -19,3 +20,12 @@ def escalate(investigation_id: UUID, author: Analyst, db: Database, payload: Esc
 @router.get("/incidents/{incident_id}", response_model=PublicIncident)
 def get(incident_id: UUID, author: Analyst, db: Database):
     return run_operation(db, lambda: service.get(db, author.id, incident_id), PublicIncident)
+
+
+@router.post("/incidents/{incident_id}/transitions", response_model=PublicIncident)
+def transition(incident_id: UUID, payload: TransitionInput, author: Analyst, db: Database):
+    try:
+        return run_operation(db, lambda: service.transition(db, author.id, incident_id, payload),
+                             PublicIncident, commit=True)
+    except IncidentTransitionError:
+        raise HTTPException(status_code=409, detail="Transição de Incident não permitida.") from None

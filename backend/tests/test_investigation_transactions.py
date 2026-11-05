@@ -94,7 +94,7 @@ def test_additive_migration_preserves_existing_role_audit(test_db_connection):
         after = connection.execute(text("SELECT id, author_id, action, occurred_at, old_role, new_role FROM audit_logs")).one()
         assert after == before
         assert connection.execute(text("SELECT old_status, new_status FROM audit_logs")).one() == (None, None)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0008_create_incidents"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0009_incident_treatment"
     finally:
         transaction.rollback()
 

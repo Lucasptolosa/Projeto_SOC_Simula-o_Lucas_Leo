@@ -93,14 +93,62 @@ A [migration 0008](../backend/migrations/versions/0008_create_incidents.py)
 sucede a 0007, sem modificar revisões existentes. Unicidade de alert_id garante
 um Incident por Alert no PostgreSQL; FKs RESTRICT preservam origem e autoria.
 O Status reutiliza IncidentStatus e sua Severity é armazenada independentemente
-de mudanças posteriores no Alert. Não há rotas de tratamento, resolução,
-listagem ou exclusão de Incidents.
+de mudanças posteriores no Alert. Não há rotas de listagem ou exclusão de Incidents.
 
 Identidade inválida/inativa retorna 401; papel ou Origin/CSRF inválidos, 403;
 referência inexistente, 404; estado incompatível ou duplicação, 409; entrada
 inválida, 422. Respostas protegidas não usam cache e erros não ecoam valores
 privados. Escalonamentos concorrentes e disputa com descarte confirmam apenas
 uma decisão, sem duplicar Incident ou Audit Log.
+
+## Tratamento persistente
+
+`POST /incidents/{incident_id}/transitions` retorna 200 com PublicIncident.
+O corpo é um objeto JSON com `target_status` exato. UNDER_INVESTIGATION não
+aceita textos; CONTAINED exige somente `containment_description`; RESOLVED
+exige somente `resolution_conclusion`. Campos desconhecidos, textos extras,
+nulos, tipos não textuais, vazio/whitespace, NUL e UTF-8 inválido retornam 422.
+Textos válidos são preservados sem normalização, truncamento ou novo limite.
+
+O serviço reutiliza `validate_transition()` para decidir os pares autorizados.
+Transições repetidas, reversas, não previstas ou após RESOLVED retornam 409.
+O estado OPEN não pode passar diretamente para RESOLVED. A resolução a partir
+de UNDER_INVESTIGATION não exige contenção prévia.
+
+O Incident conserva `analyst_id` e `opened_at`, relativos à abertura. Contenção
+acrescenta `containment_description`, `contained_by` e `contained_at`; resolução
+acrescenta `resolution_conclusion`, `resolved_by` e `resolved_at`. Esses campos
+também são retornados por `GET /incidents/{incident_id}` e permanecem nulos
+antes das operações correspondentes. A resolução preserva a contenção existente.
+Um ANALYST ativo distinto do responsável pela abertura pode executar o tratamento.
+
+A API valida a forma da entrada; o repositório recupera o Incident com
+`populate_existing` e `SELECT FOR UPDATE`; o serviço coordena as alterações,
+sem commit próprio. A identidade é revalidada sob bloqueio antes do Incident.
+A ordem User → Incident é comum às transições, sem bloquear ou alterar o Alert.
+Após obter o bloqueio, a validação usa o estado atual, inclusive quando a sessão
+já carregou a entidade anteriormente. Requisições simultâneas são serializadas;
+podem confirmar duas mudanças somente se ambas formarem uma sequência permitida
+com base nos estados atualizados, nunca uma sobrescrita a partir de estado antigo.
+
+Cada mudança gera exatamente um Audit Log `INCIDENT_STATUS_CHANGED`, com
+`entity_type=INCIDENT`, identificador, autor, old_status/new_status e instante.
+O instante é o mesmo dos campos de contenção/resolução. O início do tratamento
+usa a auditoria para autoria e instante, sem colunas redundantes. A fronteira
+HTTP confirma alteração e auditoria em um único commit; falhas provocam rollback.
+Alert ESCALATED, Logs, evidências e observações permanecem preservados.
+
+A [migration 0009](../backend/migrations/versions/0009_incident_treatment.py)
+sucede a 0008 e acrescenta seis colunas anuláveis, FKs RESTRICT para Users e
+constraints que exigem texto, autor e instante em conjunto. Incidents existentes
+mantêm seus campos e recebem valores nulos nos campos novos. Não há backfill,
+alteração de migrations anteriores ou downgrade destrutivo.
+
+As operações exigem ANALYST ativo; ADMIN não herda acesso. Escritas preservam
+Origin e CSRF. Identidade inválida/inativa retorna 401; acesso negado, 403;
+Incident inexistente, 404; conflito de transição, 409; entrada inválida, 422.
+Falhas inesperadas retornam erro genérico sem payload ou segredos. A resposta
+de sucesso é validada antes do commit e não é devolvida se o commit falhar.
 
 ## Testes
 
@@ -120,4 +168,14 @@ inválidos, unicidade real, auditoria, rollback e disputa com False Positive:
 
 ```powershell
 python -m pytest tests/test_incident_escalation.py tests/test_escalation_concurrency.py -q
+```
+
+Os testes de [tratamento](../backend/tests/test_incident_treatment.py) cobrem
+transições, terminalidade, textos, identidade, auditoria, rollback e preservação
+histórica. Os testes [transacionais](../backend/tests/test_treatment_transactions.py)
+verificam concorrência com conexões independentes e evolução de Incidents
+persistidos na revisão anterior:
+
+```powershell
+python -m pytest tests/test_incident_treatment.py tests/test_treatment_transactions.py -q
 ```

@@ -197,4 +197,4 @@ def test_migration_compativel_com_metadata(users_db):
     # Assert
     assert differences == []
     assert set(tables) == {"users", "auth_sessions", "audit_logs", "assets", "logs", "detection_rules", "detection_state", "alerts", "alert_logs", "investigations", "investigation_observations", "incidents", "alembic_version"}
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0008_create_incidents"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0009_incident_treatment"

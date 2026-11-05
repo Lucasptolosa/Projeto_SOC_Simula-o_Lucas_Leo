@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from app.audit.service import append_audit
 from app.incidents import repository
 from app.incidents.models import Incident
-from app.incidents.transitions import IncidentStatus
+from app.incidents.schemas import TransitionInput
+from app.incidents.transitions import IncidentStatus, validate_transition
 from app.investigations import service as investigations
 from app.investigations.rules import InvestigationRuleError, validate_escalation_eligibility
 
@@ -35,4 +36,30 @@ def get(db: Session, author_id: UUID, incident_id: UUID) -> Incident:
     incident = repository.get(db, incident_id)
     if incident is None:
         raise investigations.InvestigationServiceError("not_found")
+    return incident
+
+
+def transition(db: Session, author_id: UUID, incident_id: UUID, payload: TransitionInput) -> Incident:
+    author = investigations.authorize(db, author_id, lock=True)
+    incident = repository.get(db, incident_id, lock=True)
+    if incident is None:
+        raise investigations.InvestigationServiceError("not_found")
+    target = validate_transition(
+        incident.status, payload.target_status,
+        containment_description=payload.containment_description,
+        resolution_conclusion=payload.resolution_conclusion,
+    )
+    now = datetime.now(timezone.utc)
+    old_status = incident.status
+    if target is IncidentStatus.CONTAINED:
+        incident.containment_description = payload.containment_description
+        incident.contained_by, incident.contained_at = author.id, now
+    elif target is IncidentStatus.RESOLVED:
+        incident.resolution_conclusion = payload.resolution_conclusion
+        incident.resolved_by, incident.resolved_at = author.id, now
+    incident.status = target
+    append_audit(db, author_id=author.id, action="INCIDENT_STATUS_CHANGED", entity_type="INCIDENT",
+                 entity_id=str(incident.id), old_status=old_status.value, new_status=target.value,
+                 occurred_at=now)
+    db.flush()
     return incident
