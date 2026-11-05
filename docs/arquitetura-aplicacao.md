@@ -330,6 +330,14 @@ Escritas pendentes bloqueiam novos envios e logout. Conflitos 409 exigem leitura
 atualizada antes de outra decisão; falha de confirmação não repete a escrita
 automaticamente. Tokens permanecem apenas na memória da infraestrutura existente.
 
+A área `/app/investigations` utiliza o mesmo carregador de módulos ANALYST.
+investigations.js recebe as funções compartilhadas e consome somente as APIs
+de Investigations e a resposta de escalonamento já existentes. A entrada por
+UUID e a consulta individual não simulam uma listagem geral. O detalhe reúne
+observações paginadas e decisões confirmadas; um Incident retornado pela API
+permite navegar diretamente ao seu detalhe. Associações ausentes do contrato
+de leitura não são inferidas no navegador.
+
 Os [scripts locais](../backend/app/web/static) mantêm CSRF somente em memória,
 usam `textContent` para dados e não persistem tokens em localStorage ou URLs.
 Jinja mantém escape de HTML. A aplicação define CSP restritiva, proteção

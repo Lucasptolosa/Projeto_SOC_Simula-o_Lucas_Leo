@@ -148,6 +148,10 @@ time { font-size: .78rem; line-height: 1.7; }
 .incident-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
 .incident-actions { display: flex; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--line); margin-top: 20px; padding-top: 20px; }
 #incident-text { width: 100%; resize: vertical; font: inherit; padding: 12px; border: 1px solid #b9c7ca; border-radius: 6px; }
+.investigation-form { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin: 0 0 28px; }
+.investigation-form h2 { font-size: 1.05rem; }
+.investigation-form input, .investigation-form textarea, #dismiss-justification { width: 100%; min-width: 0; }
+.investigation-form textarea, #dismiss-justification { font: inherit; padding: 12px; border: 1px solid #b9c7ca; border-radius: 6px; resize: vertical; }
 @media (max-width: 700px) { .incident-facts { grid-template-columns: 1fr; gap: 8px; } .incident-detail { padding: 18px; } }
 @media (max-width: 1000px) { .app-layout { grid-template-columns: 195px minmax(0, 1fr); } .content { padding: 30px 24px; } .topbar { padding: 18px 24px; } .breadcrumb { display: none; } .filters select { min-width: 150px; } .pagination { align-items: flex-start; } }
 @media (max-width: 700px) {
