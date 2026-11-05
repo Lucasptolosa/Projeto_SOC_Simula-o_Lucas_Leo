@@ -204,15 +204,9 @@ ao desenvolvimento local. A interface utiliza recursos locais e dispensa Node.
 | Incidents | [Validação pura das transições](docs/regras-transicao-incidentes.md) e dos textos obrigatórios. |
 | Investigations | ANALYST inicia investigação, registra e consulta observações e descarta falsos positivos, com persistência e auditoria atômicas. [Contratos e API](docs/regras-investigacoes.md). |
 
-<<<<<<< HEAD
-Os núcleos de Incidents e Investigations não fornecem persistência ou rotas de
-negócio. Consulta de Logs e Alerts, APIs persistidas de investigação/tratamento
-e Dashboard são definidos na spec e não são expostos
-pela aplicação. Gerar Alerts na importação não concede sua consulta ao ADMIN.
-=======
 Incidents possui somente o núcleo de validação, sem persistência ou rotas de
-tratamento. Consulta geral de Logs e Alerts, escalonamento, administração de
-regras, Dashboard e interface web de Investigations não são expostos pela
+tratamento. Consulta geral de Logs e Alerts, escalonamento,
+Dashboard e interface web de Investigations não são expostos pela
 aplicação. Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria
@@ -221,7 +215,6 @@ existentes. Acrescenta `old_status/new_status` aos Audit Logs, sem reutilizar
 campos de papel ou modificar registros anteriores. Consulte a
 [documentação de Investigations](docs/regras-investigacoes.md) para rotas,
 paginação e regras de transação.
->>>>>>> main
 
 A página `/app` exibe a identidade autenticada; as páginas administrativas são
 exclusivas de ADMIN. ADMIN não herda as permissões de ANALYST. Não há cadastro
