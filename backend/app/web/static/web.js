@@ -18,6 +18,7 @@
   const investigationPage = page === "investigations" || page === "investigation-detail";
   const alertPage = page === "alerts" || page === "alert-detail";
   const importPage = page === "log-import";
+  const operationsPage = page === "operations";
 
   class ApiError extends Error {
     constructor(status, detail = null) { super("Falha na requisição"); this.status = status; this.detail = detail; }
@@ -66,7 +67,7 @@
     if (error.status === 401) { returnToLogin(); return; }
     if (error.status === 403) {
       analystManagement?.close();
-      if (importPage) userManagement?.close();
+      if (importPage || operationsPage) userManagement?.close();
       notify("Acesso negado. Suas permissões podem ter mudado. Volte à visão geral.", true);
     } else if (error.status === 422) {
       notify("Parâmetros inválidos. Revise os filtros e tente novamente.", true);
@@ -208,7 +209,7 @@
     document.querySelectorAll("[data-admin]").forEach((element) => { element.hidden = user.role !== "ADMIN"; });
     document.querySelectorAll("[data-analyst]").forEach((element) => { element.hidden = user.role !== "ANALYST"; });
     logout.disabled = Boolean(userManagement?.isSaving() || analystManagement?.isSaving());
-    if ((panel || importPage) && user.role !== "ADMIN") {
+    if ((panel || importPage || operationsPage) && user.role !== "ADMIN") {
       userManagement?.close();
       if (panel) panel.hidden = true;
       throw new ApiError(403);
@@ -267,6 +268,16 @@
         }
         await analystManagement.load();
       }
+      if (operationsPage) {
+        if (!userManagement) {
+          const {initOperations} = await import("/static/operations.js");
+          userManagement = initOperations({
+            write, notify, authError: handleError,
+            savingChanged: (saving) => { logout.disabled = saving; },
+          });
+        }
+        userManagement.open();
+      }
       if (panel) { panel.hidden = false; await loadRecords(); }
     } catch (error) { handleError(error); }
   }
@@ -279,6 +290,12 @@
     } catch (error) { handleError(error); logout.disabled = false; }
   });
   retry.addEventListener("click", start);
+  document.querySelector("#log-filters")?.addEventListener("submit", event => {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    for (const [name, value] of new FormData(event.currentTarget)) if (value) params.set(name, value);
+    window.location.assign(`/app/logs?${params}`);
+  });
   document.querySelector("#user-filters")?.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!busy) { currentPage = 1; loadRecords(); }
