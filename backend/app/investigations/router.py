@@ -54,9 +54,11 @@ def start(payload: StartInvestigationInput, author: Analyst, db: Database):
                          PublicInvestigation, commit=True)
 
 
-@router.get("/{investigation_id}", response_model=InvestigationDetail)
-def get(investigation_id: UUID, author: Analyst, db: Database):
-    return run_operation(db, lambda: service.get(db, author.id, investigation_id), InvestigationDetail)
+@router.get("/{investigation_id}", response_model=InvestigationDetail, response_model_exclude_unset=True)
+def get(investigation_id: UUID, author: Analyst, db: Database, include_incident: bool = False):
+    return run_operation(db, lambda: service.get(
+        db, author.id, investigation_id, include_incident=include_incident,
+    ), InvestigationDetail)
 
 
 @router.post("/{investigation_id}/observations", response_model=PublicObservation, status_code=201)

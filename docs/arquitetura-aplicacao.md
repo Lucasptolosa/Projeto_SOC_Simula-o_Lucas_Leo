@@ -306,7 +306,8 @@ evidências usam AlertLog.position, sem joins que multipliquem a lista de Alerts
 O detalhe consulta somente os Logs vinculados ao Alert solicitado e apresenta
 os identificadores persistidos de Investigation e Incident, quando existentes.
 O detalhe de Investigation apresenta o Incident correspondente pelo mesmo
-Alert de origem. Dados e
+Alert de origem quando solicitado com `include_incident=true`. A consulta
+padrão conserva os campos anteriores. Dados e
 contagens são leituras separadas em READ COMMITTED; não há snapshot entre páginas
 ou bloqueio do motor. A consulta não gera Alerts, altera Status ou grava auditoria.
 Os contratos HTTP estão na seção 3.4 da spec; validação funcional não comprova RNF05.
@@ -335,11 +336,9 @@ automaticamente. Tokens permanecem apenas na memória da infraestrutura existent
 
 A área `/app/investigations` utiliza o mesmo carregador de módulos ANALYST.
 investigations.js recebe as funções compartilhadas e consome somente as APIs
-de Investigations e a resposta de escalonamento já existentes. A entrada por
-UUID e a consulta individual não simulam uma listagem geral. O detalhe reúne
-observações paginadas e decisões confirmadas; um Incident retornado pela API
-permite navegar diretamente ao seu detalhe. Associações ausentes do contrato
-de leitura não são inferidas no navegador.
+de Investigations. A tela de Alerts preenche a entrada com o UUID de origem.
+O detalhe reúne observações paginadas, decisões confirmadas e a ligação
+persistida para Incident quando disponível.
 
 Os [scripts locais](../backend/app/web/static) mantêm CSRF somente em memória,
 usam `textContent` para dados e não persistem tokens em localStorage ou URLs.

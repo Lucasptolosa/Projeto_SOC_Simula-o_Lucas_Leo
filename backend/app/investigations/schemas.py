@@ -45,7 +45,7 @@ class PublicInvestigation(BaseModel):
 
 
 class InvestigationDetail(PublicInvestigation):
-    incident_id: UUID | None
+    incident_id: UUID | None = None
 
 
 class PublicObservation(BaseModel):

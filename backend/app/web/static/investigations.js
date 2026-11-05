@@ -94,7 +94,7 @@ export function initInvestigations({request, write, notify, authError, savingCha
     if (data) data.hidden = true;
     try {
       if (identifier) {
-        const row = await request(`/investigations/${encodeURIComponent(identifier)}`);
+        const row = await request(`/investigations/${encodeURIComponent(identifier)}?include_incident=true`);
         const observations = await request(`/investigations/${encodeURIComponent(identifier)}/observations?page=${page}&page_size=${size.value}`);
         render(row, observations);
       } else ready = true;

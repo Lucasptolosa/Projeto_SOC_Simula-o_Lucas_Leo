@@ -217,6 +217,11 @@ evidências. Um Alert `NEW` abre o formulário de Investigation com o ID
 preenchido. O detalhe recupera as ligações persistidas para Investigation e
 Incident. A Investigation permite descarte com justificativa ou escalonamento
 para tratamento e resolução na área de Incidents.
+
+Para demonstrar o fluxo com dados sintéticos, configure `mini_soc_test`,
+instale Chromium via Playwright e execute `python -m pytest tests/test_web_alert_flow.py`
+na pasta `backend`. O teste cria os eventos, percorre as duas decisões no
+navegador e remove somente o schema descartável que preparou.
 Gerar Alerts na importação não concede sua consulta ao ADMIN.
 
 A revisão `0007_create_investigations` sucede a persistência de detecção e cria
