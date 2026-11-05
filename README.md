@@ -355,8 +355,9 @@ python -m pytest tests/test_mvp_benchmarks.py -s -q
 Remove-Item Env:RUN_MVP_BENCHMARKS
 ```
 
-RNF06 mede uma importação nova de 1.000 Logs. RNF05 prepara 10.000 Logs,
-500 Alerts e 100 Incidents e mede 100 consultas com cinco clientes; exige GET
+Ambos preparam 10.000 Logs, 500 Alerts e 100 Incidents por APIs antes da medição.
+RNF06 mede uma importação nova de 1.000 Logs sobre essa base. RNF05 mede
+100 consultas com cinco clientes sincronizados após autenticação; exige GET
 /alerts disponível. Os critérios temporais são verificados e os recursos
 observados são emitidos em stdout. Resultado verde de tempo não certifica o
 ambiente: aprovação de RNF05/RNF06 exige a referência de quatro núcleos e 8 GiB

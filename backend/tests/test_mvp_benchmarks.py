@@ -5,7 +5,7 @@ import json
 import os
 import platform
 import socket
-from threading import Thread
+from threading import Barrier, Thread
 from time import perf_counter, sleep
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
@@ -78,34 +78,13 @@ def live_api(flow, test_db_settings):
         assert not thread.is_alive()
 
 
-def test_rnf06_real_http_thousand_logs(flow, live_api):
-    # Arrange
+def prepare_reference_data(flow, origin):
     _, session, _, asset, _, password, _ = flow
-    client = HttpClient(live_api, "admin-0", password)
-    records = [record(asset, n, n) for n in range(1000)]
-    # Act
-    start = perf_counter()
-    response = client.call("/logs/import", records)
-    elapsed = perf_counter() - start
-    # Assert
-    assert (response["accepted"], response["rejected"], response["detection"]["alerts_created"]) == (1000, 0, 1)
-    with session() as db:
-        assert db.scalar(select(func.count()).select_from(LogRecord)) == 1000
-        assert db.scalar(select(func.count()).select_from(AlertRecord)) == 1
-    print(json.dumps({"requirement": "RNF06", "seconds": round(elapsed, 6), "threshold_seconds": 15, "resources": resources()}))
-    assert elapsed <= 15
-
-
-def test_rnf05_real_http_five_clients(flow, live_api):
-    # Arrange
-    if "/alerts" not in app.openapi()["paths"]:
-        pytest.skip("GET /alerts depende da integração do PR #57.")
-    _, session, _, asset, _, password, _ = flow
-    admin = HttpClient(live_api, "admin-0", password)
+    admin = HttpClient(origin, "admin-0", password)
     for batch in range(10):
         payload = [record(asset, n, n, username=f"benchmark-{n // 20}") for n in range(batch * 1000, (batch + 1) * 1000)]
         assert admin.call("/logs/import", payload)["accepted"] == 1000
-    analyst = HttpClient(live_api, "flow-analyst", password)
+    analyst = HttpClient(origin, "flow-analyst", password)
     with session() as db: alerts = list(db.scalars(select(AlertRecord.id).order_by(AlertRecord.id).limit(100)))
     for alert in alerts:
         investigation = analyst.call("/investigations", {"alert_id": str(alert)})
@@ -114,8 +93,38 @@ def test_rnf05_real_http_five_clients(flow, live_api):
         assert db.scalar(select(func.count()).select_from(LogRecord)) == 10000
         assert db.scalar(select(func.count()).select_from(AlertRecord)) == 500
         assert db.scalar(select(func.count()).select_from(Incident)) == 100
+    return admin
+
+
+def test_rnf06_real_http_thousand_logs(flow, live_api):
+    # Arrange
+    _, session, _, asset, *_ = flow
+    client = prepare_reference_data(flow, live_api)
+    records = [record(asset, n, n, username="rnf06-new") for n in range(10000, 11000)]
+    # Act
+    start = perf_counter()
+    response = client.call("/logs/import", records)
+    elapsed = perf_counter() - start
+    # Assert
+    assert (response["accepted"], response["rejected"], response["detection"]["alerts_created"]) == (1000, 0, 1)
+    with session() as db:
+        assert db.scalar(select(func.count()).select_from(LogRecord)) == 11000
+        assert db.scalar(select(func.count()).select_from(AlertRecord)) == 501
+        assert db.scalar(select(func.count()).select_from(Incident)) == 100
+    print(json.dumps({"requirement": "RNF06", "seconds": round(elapsed, 6), "threshold_seconds": 15, "resources": resources()}))
+    assert elapsed <= 15
+
+
+def test_rnf05_real_http_five_clients(flow, live_api):
+    # Arrange
+    if "/alerts" not in app.openapi()["paths"]:
+        pytest.skip("GET /alerts depende da integração do PR #57.")
+    _, _, _, _, _, password, _ = flow
+    prepare_reference_data(flow, live_api)
+    barrier = Barrier(5)
     def measure(_):
         browser = HttpClient(live_api, "flow-analyst", password)
+        barrier.wait(timeout=30)
         measurements = []
         for _ in range(20):
             start = perf_counter()
