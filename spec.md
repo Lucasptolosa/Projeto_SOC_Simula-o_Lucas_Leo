@@ -65,19 +65,13 @@ Os campos são obrigatórios. `event_id` deve ser único; `asset_id` deve refere
 O UUID do exemplo é ilustrativo e deve ser substituído pelo identificador de um
 Asset realmente cadastrado.
 
-#### 3.1.1 Contrato da importação de Logs - Issue #40
-
-**Estado do aceite:** as quatro decisões foram aprovadas pelos dois integrantes,
-conforme confirmação explícita do usuário no chat do Codex em 2026-11-04:
-limite de `event_id` em bytes UTF-8, aceitação de Assets `INACTIVE`, preservação
-dos textos sem normalização/truncamento e rejeição individual de campos
-desconhecidos. Esse aceite não substitui a revisão técnica nem autoriza merges.
+#### 3.1.1 Contratos de importação de Logs
 
 - `event_id` e `username` são textos não vazios e não compostos somente de
   whitespace, sem normalização ou truncamento. NUL e texto não representável
   em UTF-8 são rejeitados individualmente antes da persistência.
 - `event_id` admite até **1.024 bytes UTF-8**, inclusive. `username` não recebe
-  novo limite. O limite aprovado é aplicado por validação e por constraint no banco;
+  novo limite. O limite é aplicado por validação e por constraint no banco;
   excedê-lo produz `invalid_event_id`, preservando os demais itens do lote.
 - `asset_id` é UUID e referencia Asset existente. Logs de Assets `INACTIVE`
   também são aceitos, inclusive eventos históricos. O estado do Asset não é
@@ -91,7 +85,7 @@ desconhecidos. Esse aceite não substitui a revisão técnica nem autoriza merge
   esse identificador é aceito; repetições são rejeitadas sem substituir o original.
 - O conteúdo do arquivo JSON é enviado no corpo de `POST /logs/import` com
   `Content-Type: application/json`, como lista de 1 a 1.000 itens. Não há upload
-  multipart nesta entrega. A operação é exclusiva de ADMIN autenticado e ativo,
+  multipart. A operação é exclusiva de ADMIN autenticado e ativo,
   com as proteções existentes de Origin e CSRF.
 - Um lote processado retorna HTTP 200, inclusive quando todos os itens forem
   rejeitados. A resposta contém `accepted`, `rejected` e `rejections`, com
@@ -114,10 +108,10 @@ um evento válido por ser anterior a outro já importado. O resultado da avalia�
 interface, auditoria adicional de importação e reprocessamento de detecção
 não fazem parte do contrato de ingestão.
 
-#### 3.1.2 Integração da importação com Detection Engine - Issue #47
+#### 3.1.2 Integração da importação com Detection Engine
 
-Contratos alinhados com a dupla para integrar RF07, RF08, RF09, RF22, RF23 e
-as seções 8 a 8.2, preservando as regras e os contratos de ingestão:
+A integração atende a RF07, RF08, RF09, RF22, RF23 e às seções 8 a 8.2,
+preservando as regras e os contratos de ingestão:
 
 - Depois da validação e inserção, somente os Logs novos persistidos pelo lote
   participam da detecção. Itens inválidos ou duplicados não entram no motor.
@@ -156,15 +150,15 @@ as seções 8 a 8.2, preservando as regras e os contratos de ingestão:
   inativa; reativação só afeta avaliações posteriores, sem emissão retroativa.
 
 A geração e a persistência de Alerts não disponibilizam sua consulta ao ADMIN.
-A matriz da seção 2 permanece válida. Consulta/gestão de Alerts (#12) e API
-administrativa de ativação/desativação com auditoria (RF18/RF15.1) são entregas
-distintas; esta integração lê o catálogo persistido sem expor mutações de regras.
+A matriz da seção 2 permanece válida. Consulta/gestão de Alerts e API
+administrativa de ativação/desativação com auditoria (RF18/RF15.1) são operações
+distintas; a integração lê o catálogo persistido sem expor mutações de regras.
 RNF06 exige medição própria no ambiente de referência e não é demonstrado
 somente pela execução dos testes funcionais.
 
 ### 3.2 Contratos de gerenciamento de Assets
 
-Detalhamento dos RF04, RF05 e RF29 alinhado na Issue #38:
+Os contratos de gerenciamento de Assets detalham RF04, RF05 e RF29:
 
 - O identificador de Asset é UUID gerado pelo servidor. Nome não é único;
   Assets distintos podem possuir o mesmo nome. Não há normalização automática
@@ -178,15 +172,15 @@ Detalhamento dos RF04, RF05 e RF29 alinhado na Issue #38:
   Uma solicitação de alteração sem campos é inválida.
 - A desativação altera `ACTIVE` para `INACTIVE`. Se o Asset já estiver
   `INACTIVE`, retorna seu estado atual sem nova alteração nem novo Audit Log.
-- Não há exclusão física nem operação de reativação nesta entrega.
+- Não há exclusão física nem operação de reativação no gerenciamento de Assets.
 - Mutações reais bem-sucedidas devem gerar o Audit Log previsto no RF15.1,
   na mesma transação da alteração do Asset. Falha em uma das gravações deve
   reverter ambas. Uma repetição sem mutação não cria auditoria de alteração.
 
-Esses contratos não definem política de importação para Asset inativo nem
-significam que Logs/Alerts já estejam persistidos ou integrados.
+A importação de Logs de Assets inativos segue a seção 3.1.1. As operações de
+gerenciamento não executam detecção nem geram Alerts.
 
-As operações HTTP da entrega #38 são exclusivas de Administrator autenticado,
+As operações HTTP de gerenciamento são exclusivas de Administrator autenticado,
 reutilizando as verificações existentes de Origin e CSRF nas escritas:
 
 | Operação | Entrada | Resposta de sucesso |
@@ -387,7 +381,7 @@ A transição para `CONTAINED` deve atender ao RF33. As transições para `RESOL
 - Toda mudança relevante começa em Issue, segue para branch específica e é entregue por Pull Request revisado pelo outro integrante.
 - **Quando uma mudança de código altera comportamento documentado, atualizar `spec.md`, código e testes no mesmo commit lógico.**
 - Ambas as pessoas precisam ser autoras de commits reais em suas respectivas funcionalidades.
-- Decisões arquiteturais relevantes devem ser documentadas em ADR; `plan.md`, `tasks.md` e `README.md` devem permanecer coerentes com o repositório.
+- Decisões arquiteturais relevantes devem ser documentadas em ADR; a documentação técnica e o `README.md` devem permanecer coerentes com o repositório.
 - Não registrar credenciais, tokens nem dados sensíveis no Git ou nos Logs.
 
 ## 11. Critérios de qualidade, validação e entrega

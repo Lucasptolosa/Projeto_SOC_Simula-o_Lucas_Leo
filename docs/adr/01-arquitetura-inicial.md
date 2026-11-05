@@ -17,17 +17,17 @@
 
 ### 1.2. Arquitetura de software
 
-O sistema adotará uma arquitetura de **monólito modular**.
+O sistema adota uma arquitetura de **monólito modular**.
 
-O back-end será desenvolvido como uma única aplicação, organizada internamente em módulos com responsabilidades definidas.
+O back-end é uma única aplicação, organizada internamente em módulos com responsabilidades definidas.
 
-A organização seguirá a separação de responsabilidades entre:
+A organização segue a separação de responsabilidades entre:
 
 - **Camada de API:** recebimento de requisições HTTP, validação de entradas e construção de respostas.
 - **Camada de serviços:** implementação e coordenação das regras de negócio.
 - **Camada de persistência:** acesso e manipulação dos dados armazenados no banco.
 
-A estrutura detalhada dos módulos e diretórios será definida no planejamento técnico.
+A estrutura dos módulos e diretórios está no [guia dos componentes](../arquitetura-aplicacao.md).
 
 ## 2. Justificativas
 
