@@ -1,0 +1,11 @@
+{% extends "shell.html" %}
+{% block content %}
+<p class="page-description">Envie um arquivo JSON com uma lista de 1 a 1.000 registros. A API valida cada item e confirma o resultado da ingestão e da detecção.</p>
+<section id="log-import-panel" class="panel incident-detail" aria-label="Importação de Logs" hidden>
+  <form id="log-import-form"><label for="log-file">Arquivo JSON</label><input id="log-file" name="file" type="file" accept=".json,application/json" required><p class="muted">O conteúdo é enviado ao fluxo de importação; o arquivo não é armazenado separadamente.</p><button type="submit" class="primary">Importar Logs</button></form>
+  <div id="log-import-result" hidden>
+    <section class="incident-history"><h2>Ingestão</h2><p id="ingestion-summary"></p><div class="table-scroll" role="region" aria-label="Rejeições de ingestão" tabindex="0"><table><thead><tr><th scope="col">Posição</th><th scope="col">Motivo</th><th scope="col">Detalhe</th></tr></thead><tbody id="ingestion-rejections"></tbody></table></div></section>
+    <section class="incident-history"><h2>Detecção</h2><p id="detection-summary"></p><div class="table-scroll" role="region" aria-label="Rejeições de detecção" tabindex="0"><table><thead><tr><th scope="col">Posição</th><th scope="col">Motivo</th><th scope="col">Detalhe</th></tr></thead><tbody id="detection-rejections"></tbody></table></div></section>
+  </div>
+</section>
+{% endblock %}
